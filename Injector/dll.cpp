@@ -17,13 +17,15 @@ static dword_t rva2raw(dword_t rva, std::vector<PIMAGE_SECTION_HEADER> pe_sectio
 	return NULL;
 }
 
-bool DLLParser::initialize(const char* bytes) {
-	if (!bytes)
+bool DLLParser::initialize(const char* pebase, const size_t size)
+{
+	if (!pebase)
 	{
 		return false;
 	}
 
-	this->base = bytes;
+	this->base = pebase;
+	this->size = size;
 
 	this->p_dos_header = (PIMAGE_DOS_HEADER)(base);
 	if (this->p_dos_header->e_magic != IMAGE_DOS_SIGNATURE) {
@@ -89,6 +91,28 @@ void* DLLParser::retrieve_func_raw_ptr(const char* func_name)
 	}
 
 	return exported_func_addr_rva;
+}
+
+byte_t* DLLParser::find_func_end(byte_t* func_raw_ptr)
+{
+
+	PRUNTIME_FUNCTION p_runtime_func = (PRUNTIME_FUNCTION)(
+		base + 
+		rva2raw(optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress
+			, pe_sections
+			, (int)file_header.NumberOfSections));
+
+	for (size_t i = 0; i < optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(RUNTIME_FUNCTION); i++)
+	{
+		// Access the fields of each RUNTIME_FUNCTION structure
+		if ((void*)rva2raw(p_runtime_func[i].BeginAddress, pe_sections, (int)file_header.NumberOfSections) == func_raw_ptr) {
+
+			return (byte_t*)(rva2raw(p_runtime_func[i].EndAddress - 1, pe_sections, (int)file_header.NumberOfSections));
+		}
+
+	}
+
+	return nullptr;
 }
 
 

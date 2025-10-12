@@ -15,37 +15,18 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="headers.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
+    <ClCompile Include="test.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="misc.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="syscalls.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="hwbp.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
+    <MASM Include="syscall.asm">
       <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="cpp.hint" />
-    <None Include="syscall.asm">
-      <Filter>源文件</Filter>
-    </None>
+    </MASM>
   </ItemGroup>
 </Project>
