@@ -1,7 +1,7 @@
 #include "download.h"
 #include <iostream>
+#include <urlmon.h>
 #include <wininet.h>
-
 
 std::vector<char> download_from_url(_in_ const char* url)
 {

