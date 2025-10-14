@@ -105,7 +105,7 @@ byte_t* DLLParser::find_func_end(byte_t* func_raw_ptr)
 	for (size_t i = 0; i < optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(RUNTIME_FUNCTION); i++)
 	{
 		// Access the fields of each RUNTIME_FUNCTION structure
-		if ((void*)rva2raw(p_runtime_func[i].BeginAddress, pe_sections, (int)file_header.NumberOfSections) == func_raw_ptr) {
+		if ((byte_t*)rva2raw(p_runtime_func[i].BeginAddress, pe_sections, (int)file_header.NumberOfSections) == func_raw_ptr) {
 
 			return (byte_t*)(rva2raw(p_runtime_func[i].EndAddress - 1, pe_sections, (int)file_header.NumberOfSections));
 		}

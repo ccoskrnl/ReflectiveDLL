@@ -495,6 +495,12 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		return FALSE;
 	}
 
+	__try {
+		int x = 0;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+	}
+
 	return pebase;
 
 }
@@ -590,6 +596,7 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	return TRUE;
 
 }
+
 
 bool init_func_addr(PFUNCTION_ADDRESSES func_addr)
 {

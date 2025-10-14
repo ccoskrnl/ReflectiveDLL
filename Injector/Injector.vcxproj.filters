@@ -21,7 +21,7 @@
     <ClCompile Include="args.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="download.cpp">
+    <ClCompile Include="utils.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="dll.cpp">
@@ -35,7 +35,7 @@
     <ClInclude Include="args.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="download.h">
+    <ClInclude Include="utils.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="dll.h">
