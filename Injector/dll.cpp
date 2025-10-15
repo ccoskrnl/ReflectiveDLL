@@ -1,7 +1,7 @@
 #include "framework.h"
 #include "dll.h"
 
-static dword_t rva2raw(dword_t rva, std::vector<PIMAGE_SECTION_HEADER> pe_sections, int num_of_secs) {
+static dword_t rva2raw(dword_t rva, const std::vector<PIMAGE_SECTION_HEADER>& pe_sections, int num_of_secs) {
 
 	for (int i = 0; i < num_of_secs; i++) {
 		// sections might have different offset, so we need to find the one where our RVA is falling into
@@ -51,8 +51,7 @@ bool DLLParser::initialize(const char* pebase, const size_t size)
 			by the size of section header.
 		*/
 
-		pe_sections.insert(
-			pe_sections.begin(),
+		pe_sections.push_back(
 			(PIMAGE_SECTION_HEADER)(
 				((PBYTE)(p_nt_header)) + NT_HEADER_SIGNATURE_SIZE + FILE_HEADER_SIZE + file_header.SizeOfOptionalHeader
 				+ (i * IMAGE_SIZEOF_SECTION_HEADER))
@@ -90,7 +89,40 @@ void* DLLParser::retrieve_func_raw_ptr(const char* func_name)
 		}
 	}
 
-	return exported_func_addr_rva;
+	return (void*)(resolve_jmp_to_actual_function((void*)((uintptr_t)base + (uintptr_t)exported_func_addr_rva)) - (uintptr_t)base);
+}
+
+uintptr_t DLLParser::resolve_jmp_to_actual_function(void* func_addr)
+{
+	if (!func_addr) return 0;
+
+	byte_t* code = (byte_t*)func_addr;
+
+	// relative jmp
+	if (code[0] == 0xE9)
+	{
+		int32_t relative_offset = *(int32_t*)(code + 1);
+
+		void* next_instruction = (void*)((uintptr_t)func_addr + 5);
+		void* actual_function = (void*)((uintptr_t)next_instruction + relative_offset);
+
+		return (uintptr_t)actual_function;
+	}
+
+	// indirect jmp
+	if (code[0] == 0xff && code[1] == 0x25)
+	{
+		// x64: FF 25 [32bits relative offset]
+		uint32_t relative_offset = *(int32_t*)(code + 2);
+		// 6 = FF25(2) + offset(4)
+		void* import_table_addr = (void*)((uintptr_t)func_addr + 6 + relative_offset);
+
+		void* actual_function = *(void**)import_table_addr;
+
+		return (uintptr_t)actual_function;
+	}
+
+	return (uintptr_t)func_addr;
 }
 
 byte_t* DLLParser::find_func_end(byte_t* func_raw_ptr)
@@ -105,6 +137,9 @@ byte_t* DLLParser::find_func_end(byte_t* func_raw_ptr)
 	for (size_t i = 0; i < optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(RUNTIME_FUNCTION); i++)
 	{
 		// Access the fields of each RUNTIME_FUNCTION structure
+		if (p_runtime_func[i].BeginAddress == 0 && p_runtime_func[i].EndAddress == 0 && p_runtime_func[i].UnwindData == 0)
+			continue;
+
 		if ((byte_t*)rva2raw(p_runtime_func[i].BeginAddress, pe_sections, (int)file_header.NumberOfSections) == func_raw_ptr) {
 
 			return (byte_t*)(rva2raw(p_runtime_func[i].EndAddress - 1, pe_sections, (int)file_header.NumberOfSections));

