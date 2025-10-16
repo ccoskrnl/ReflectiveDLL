@@ -1,7 +1,7 @@
 #include "framework.h"
 #include "dll.h"
 
-static dword_t rva2raw(dword_t rva, const std::vector<PIMAGE_SECTION_HEADER>& pe_sections, int num_of_secs) {
+static dword_t rva2raw(dword_t rva, const PIMAGE_SECTION_HEADER* pe_sections, int num_of_secs) {
 
 	for (int i = 0; i < num_of_secs; i++) {
 		// sections might have different offset, so we need to find the one where our RVA is falling into
@@ -39,8 +39,10 @@ bool DLLParser::initialize(const char* pebase, const size_t size)
 
 	file_header = p_nt_header->FileHeader;
 	optional_header = p_nt_header->OptionalHeader;
-
-
+	pe_sections = (PIMAGE_SECTION_HEADER*)malloc(sizeof(PIMAGE_SECTION_HEADER) * file_header.NumberOfSections);
+	if (pe_sections == NULL)
+		return false;
+	
 	for (int i = 0; i < file_header.NumberOfSections; i++)
 	{
 		/* 
@@ -50,12 +52,9 @@ bool DLLParser::initialize(const char* pebase, const size_t size)
 			to get to the next i multiply the index running through the number of sections multiplied 
 			by the size of section header.
 		*/
-
-		pe_sections.push_back(
-			(PIMAGE_SECTION_HEADER)(
-				((PBYTE)(p_nt_header)) + NT_HEADER_SIGNATURE_SIZE + FILE_HEADER_SIZE + file_header.SizeOfOptionalHeader
-				+ (i * IMAGE_SIZEOF_SECTION_HEADER))
-		);
+		pe_sections[i] = ((PIMAGE_SECTION_HEADER)(
+			((PBYTE)(p_nt_header)) + NT_HEADER_SIGNATURE_SIZE + FILE_HEADER_SIZE + file_header.SizeOfOptionalHeader
+			+ (i * IMAGE_SIZEOF_SECTION_HEADER)));
 
 	}
 

@@ -61,7 +61,7 @@ static byte_t* inject_dll_to_remote_proc(int pid, size_t dll_size, byte_t* dll_b
 		return NULL;
 	}
 
-	byte_t* tmp_dll_buf = (byte_t*)new byte_t[dll_size + HEADER_SIZE];
+	byte_t* tmp_dll_buf = (byte_t*)new byte_t[dll_size + DLL_HEADER_SIZE];
 
 	// copy the original dll 
 	memcpy(tmp_dll_buf + DLL_HEADER_SIZE, dll_buf, dll_size);
@@ -72,7 +72,7 @@ static byte_t* inject_dll_to_remote_proc(int pid, size_t dll_size, byte_t* dll_b
 	// copy reflectivefunction size
 	memcpy(tmp_dll_buf + HEADER_SIZE + Key::OB_XOR_KEY_SIZE, &func_size, FUNC_SIZE);
 
-	if (WriteProcessMemory(proc, dll_dst, tmp_dll_buf, dll_size + HEADER_SIZE, &bytes_written))
+	if (WriteProcessMemory(proc, dll_dst, tmp_dll_buf, dll_size + DLL_HEADER_SIZE, &bytes_written))
 	{
 		printf("[+] Successfully wrote DLL bytes + header at remote address: %p\n", dll_dst);
 	}
@@ -82,7 +82,7 @@ static byte_t* inject_dll_to_remote_proc(int pid, size_t dll_size, byte_t* dll_b
 		return NULL;
 	}
 
-	//delete[] tmp_dll_buf;
+	delete[] tmp_dll_buf;
 
 	return dll_dst;
 }
@@ -260,7 +260,6 @@ int main(int argc, char* argv[]) {
 
 	WaitForSingleObject(thread, INFINITE);
 
-	// 7. 清理
 	CloseHandle(thread);
 
 	return 0;

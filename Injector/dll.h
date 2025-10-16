@@ -14,7 +14,8 @@ public:
 	//~DLLParser() = default;
 	~DLLParser()
 	{
-		pe_sections.clear();
+		if (pe_sections != NULL)
+			free(pe_sections);
 	}
 
 	bool initialize(const char* pebase, const size_t size);
@@ -29,7 +30,8 @@ private:
 
 	PIMAGE_DOS_HEADER p_dos_header = nullptr;
 	PIMAGE_NT_HEADERS p_nt_header = nullptr;
-	std::vector<PIMAGE_SECTION_HEADER> pe_sections;
+	//std::vector<PIMAGE_SECTION_HEADER> pe_sections;
+	PIMAGE_SECTION_HEADER* pe_sections = nullptr;
 	IMAGE_FILE_HEADER file_header{};
 	IMAGE_OPTIONAL_HEADER optional_header{};
 
