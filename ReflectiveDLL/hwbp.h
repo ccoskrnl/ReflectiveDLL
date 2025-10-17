@@ -98,8 +98,8 @@ VOID unset_hwbp(DrIndex index)
     ZwSetContextThread(
         (HANDLE)-2,
         &ctx,
-        zw_func_s[ZwGetContextThreadF].SSN,
-        zw_func_s[ZwGetContextThreadF].sysretAddr
+        zw_func_s[ZwSetContextThreadF].SSN,
+        zw_func_s[ZwSetContextThreadF].sysretAddr
 	);
 
 }
@@ -123,8 +123,8 @@ VOID set_hwbp(DrIndex index, PVOID addr, PSYSCALL_ENTRY zw_func_s)
     ZwSetContextThread(
         (HANDLE)-2,
         &ctx,
-        zw_func_s[ZwGetContextThreadF].SSN,
-        zw_func_s[ZwGetContextThreadF].sysretAddr
+        zw_func_s[ZwSetContextThreadF].SSN,
+        zw_func_s[ZwSetContextThreadF].sysretAddr
 	);
 }
 

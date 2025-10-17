@@ -23,6 +23,12 @@
     <ClInclude Include="misc.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="syscalls.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="headers.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <MASM Include="syscall.asm">
