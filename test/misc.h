@@ -135,6 +135,32 @@ void ToLowerCaseWIDE(WCHAR str[]) {
 
 }
 
+int str_icmp(const char* str1, const char* str2) {
+    while (*str1 != '\0' && *str2 != '\0') {
+        char c1 = *str1;
+        char c2 = *str2;
+
+        // 将字符转换为小写（如果为大写字母）
+        if (c1 >= 'A' && c1 <= 'Z') {
+            c1 += 32;  // 大写转小写
+        }
+        if (c2 >= 'A' && c2 <= 'Z') {
+            c2 += 32;  // 大写转小写
+        }
+
+        // 比较转换后的字符
+        if (c1 != c2) {
+            return 0;  // 不相同返回FALSE
+        }
+
+        str1++;
+        str2++;
+    }
+
+    // 检查是否同时到达字符串末尾
+    return (*str1 == '\0' && *str2 == '\0') ? 1 : 0;
+}
+
 bool CompareNStringASCII(CHAR str1[], CHAR str2[], int n) {
 
 
@@ -468,6 +494,19 @@ void ParseForwarder(CHAR forwarder[], CHAR dll[], CHAR function[]) {
     }
     function[z + 1] = '\0';
 }
+
+//bool parse_forwarder(
+//    const char* forwarder,
+//    char* dll,
+//    size_t dll_size,
+//    char* function,
+//    size_t function_size
+//)
+//{
+//
+//}
+
+
 
 void ConvertPointerToString(LPVOID pointer, char* buffer, size_t bufferSize) {
     const char hexDigits[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };

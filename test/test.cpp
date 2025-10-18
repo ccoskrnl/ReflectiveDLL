@@ -4,6 +4,11 @@
 #include "headers.h"
 #include "syscalls.h"
 
+#include <string>
+#include <vector>
+#include <filesystem>
+#include <fstream>
+
 typedef struct _SAC_DLL_HEADER
 {
 	HANDLE sac_dll_handle;
@@ -34,6 +39,7 @@ typedef enum {
     DR3 = 3,
 } DrIndex;
 
+LPVOID moduleBase = NULL;
 
 static uintptr_t resolve_jmp_to_actual_function(void* func_addr)
 {
@@ -918,34 +924,37 @@ PBYTE ReflectiveFunction()
     }
 
     /* brute force reflective dll base address search */
-    current_module_base = (ULONG_PTR)ReflectiveFunction;
-    while (TRUE)
-    {
-        dll_hdr = (PDLL_HEADER)current_module_base;
-        //if (dll_hdr->header = 0x44434241)
-        //{
-            img_dos_hdr = (PIMAGE_DOS_HEADER)(current_module_base + (16));
-            if (img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
-            {
-                img_nt_hdrs = (PIMAGE_NT_HEADERS)(current_module_base + img_dos_hdr->e_lfanew + 16);
+    //current_module_base = (ULONG_PTR)ReflectiveFunction;
+    //while (current_module_base)
+    //{
+    //    dll_hdr = (PDLL_HEADER)current_module_base;
+    //    //if (dll_hdr->header = 0x44434241)
+    //    //{
+    //        img_dos_hdr = (PIMAGE_DOS_HEADER)(current_module_base);
+    //        if (img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
+    //        {
+    //            img_nt_hdrs = (PIMAGE_NT_HEADERS)(current_module_base + img_dos_hdr->e_lfanew);
 
-                if (img_nt_hdrs->Signature == IMAGE_NT_SIGNATURE)
-                    break;
-            }
+    //            if (img_nt_hdrs->Signature == IMAGE_NT_SIGNATURE)
+    //                break;
+    //        }
 
-        //}
-        current_module_base--;
-    }
+    //    //}
+    //    current_module_base--;
+    //}
 
 
     // here it still needs to be adjusted because there are the headers in
     // between, check some lines later
 
-    if (!current_module_base)
-        return FALSE;
+    //if (!current_module_base)
+    //    return FALSE;
 
-    mem_to_free = (PBYTE)current_module_base;
+    //mem_to_free = (PBYTE)current_module_base;
 
+    current_module_base = (ULONG_PTR)moduleBase;
+    img_dos_hdr = (PIMAGE_DOS_HEADER)(current_module_base);
+	img_nt_hdrs = (PIMAGE_NT_HEADERS)(current_module_base + img_dos_hdr->e_lfanew);
     PIMAGE_OPTIONAL_HEADER img_opt_hdr = (PIMAGE_OPTIONAL_HEADER)((ULONG_PTR)img_nt_hdrs
         + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER)); // skip nt_hdrs->Signature
 
@@ -962,8 +971,9 @@ PBYTE ReflectiveFunction()
     unset_hwbp(DrIndex::DR1);
     unset_hwbp(DrIndex::DR2);
     unset_hwbp(DrIndex::DR3);
-
-    func_RemoveVectoredExceptionHandler(g_VectoredHandlerHandle);
+    
+    func_RemoveVectoredExceptionHandler((PVECTORED_EXCEPTION_HANDLER)&VectorHandler);
+    //func_RemoveVectoredExceptionHandler(g_VectoredHandlerHandle);
 
     sac_dll_base = (PBYTE)sac_dll_module_by_LoadLibrary;
 
@@ -1048,7 +1058,7 @@ PBYTE ReflectiveFunction()
 
     // fixing the base address including the 16 bytes of header.
     // skip the custom header
-    current_module_base = current_module_base + (16);
+    //current_module_base = current_module_base + (16);
 
     reflective_dll_base = (PBYTE)sac_dll;
     custom_memcpy_classic(reflective_dll_base, &sac_dll_handle, sizeof(HANDLE));
@@ -1097,6 +1107,10 @@ PBYTE ReflectiveFunction()
             pe_sections[i]->SizeOfRawData
         );
     }
+    
+    
+    char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
+    
 
     /* FIX IAT TABLE */
     for (size_t i = 0; i < img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size; i += sizeof(IMAGE_IMPORT_DESCRIPTOR))
@@ -1106,7 +1120,12 @@ PBYTE ReflectiveFunction()
         if (img_imp_desc->OriginalFirstThunk == NULL && img_imp_desc->FirstThunk == NULL)
             break;
 
-        dll = func_LoadLibraryA((LPSTR)(reflective_dll_base + img_imp_desc->Name));
+        char* import_module_name = (LPSTR)(reflective_dll_base + img_imp_desc->Name);
+
+        if (str_icmp(import_module_name, str_msvcp140d))
+            continue;
+
+        dll = func_LoadLibraryA(import_module_name);
         if (dll == NULL)
             return FALSE;
 
@@ -1194,6 +1213,10 @@ PBYTE ReflectiveFunction()
 
     for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
     {
+
+        if ((SIZE_T)pe_sections[i]->SizeOfRawData == 0)
+            continue;
+
         // write
         if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
         {
@@ -1380,17 +1403,17 @@ bool _123321_asdf21425()
     pebase = ReflectiveFunction();
 
 
-    p_dll_header->key = { 0 };
+    //p_dll_header->key = { 0 };
 
-    p_dll_main = (fnDllMain)(pebase + p_img_nt_hdrs->OptionalHeader.AddressOfEntryPoint);
+    //p_dll_main = (fnDllMain)(pebase + p_img_nt_hdrs->OptionalHeader.AddressOfEntryPoint);
 
-    HANDLE h_thread = fn_create_thread(
-        NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc,
-        (LPVOID)p_dll_main, 0, NULL
-    );
+    //HANDLE h_thread = fn_create_thread(
+    //    NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc,
+    //    (LPVOID)p_dll_main, 0, NULL
+    //);
 
-    if (h_thread == NULL)
-        return FALSE;
+    //if (h_thread == NULL)
+    //    return FALSE;
 
     return TRUE;
 
@@ -1785,8 +1808,49 @@ int sleaping(
 }
 
 
+static std::vector<char> load_local_file(const std::string& file_path)
+{
+    std::vector<char> buffer;
+
+    try
+    {
+        std::filesystem::path absolute_path = std::filesystem::absolute(file_path);
+        std::ifstream file(absolute_path, std::ios::binary | std::ios::ate);
+        if (!file)
+        {
+            std::cout << "[-] Cannot open file: " << absolute_path << std::endl;
+            return buffer;
+        }
+
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        buffer.resize(size);
+        if (!file.read(buffer.data(), size)) {
+            std::cout << "[-] Error reading file: " << absolute_path << std::endl;
+            buffer.clear();
+            return buffer;
+        }
+
+        std::cout << "[+] Successfully loaded " << size << " bytes from: " << absolute_path << std::endl;
+
+    }
+    catch (const std::exception& e)
+    {
+        std::cout << "[-] Exception: " << e.what() << std::endl;
+    }
+
+    return buffer;
+}
+
 int main(void) 
 {
+
+    std::string filePath = "D:\\files\\projects\\ReflectiveDLL\\x64\\Debug\\test.exe";
+
+    std::vector<char> pefile = load_local_file(filePath);
+    moduleBase = pefile.data();
+
     _123321_asdf21425();
     PSAC_DLL_HEADER sac_dll_header = NULL;
 

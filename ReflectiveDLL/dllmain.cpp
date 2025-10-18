@@ -159,7 +159,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	while (TRUE)
 	{
 		dll_hdr = (PDLL_HEADER)current_module_base;
-		if (dll_hdr->header = 0x44434241)
+		if (dll_hdr->header == 0x44434241)
 		{
 			img_dos_hdr = (PIMAGE_DOS_HEADER)(current_module_base + (16));
 			if (img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
@@ -338,6 +338,10 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		);
 	}
 
+    
+    char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
+    
+
 	/* FIX IAT TABLE */
 	for (size_t i = 0; i < img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size; i += sizeof(IMAGE_IMPORT_DESCRIPTOR))
 	{
@@ -345,6 +349,11 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		img_imp_desc = (PIMAGE_IMPORT_DESCRIPTOR)(reflective_dll_base + img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress + i);
 		if (img_imp_desc->OriginalFirstThunk == NULL && img_imp_desc->FirstThunk == NULL)
 			break;
+
+        char* import_module_name = (LPSTR)(reflective_dll_base + img_imp_desc->Name);
+
+        if (str_icmp(import_module_name, str_msvcp140d))
+            continue;
 
 		dll = func_LoadLibraryA((LPSTR)(reflective_dll_base + img_imp_desc->Name));
 		if (dll == NULL)
@@ -434,6 +443,10 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
 	{
+
+        if ((SIZE_T)pe_section_ptr_array[i]->SizeOfRawData == 0)
+            continue;
+
 		// write
 		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
 		{
@@ -612,6 +625,10 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	p_dll_header->key = { 0 };
 
 	p_dll_main = (fnDllMain)(pebase + p_img_nt_hdrs->OptionalHeader.AddressOfEntryPoint);
+
+	// buggy
+	int* p = 0;
+	*p = 1;
 
 	HANDLE h_thread = func_CreateThread(
 		NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc,
