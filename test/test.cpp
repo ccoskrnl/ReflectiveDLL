@@ -820,7 +820,7 @@ PBYTE ReflectiveFunction()
     IMAGE_OPTIONAL_HEADER	ImgOptHdr = { 0 };
     IMAGE_FILE_HEADER img_file_hdr = { 0 };
 
-    PIMAGE_SECTION_HEADER* pe_sections = NULL;
+    PIMAGE_SECTION_HEADER* pe_section_ptr_array = NULL;
     PIMAGE_IMPORT_DESCRIPTOR img_imp_desc = NULL;
     PIMAGE_THUNK_DATA64 original_first_thunk = NULL;
     PIMAGE_THUNK_DATA64 first_thunk = NULL;
@@ -1089,25 +1089,30 @@ PBYTE ReflectiveFunction()
     )) != 0)
         return FALSE;
 
-    pe_sections = (PIMAGE_SECTION_HEADER*)pe_section_temp;
+    pe_section_ptr_array = (PIMAGE_SECTION_HEADER*)pe_section_temp;
 
-    if (pe_sections == NULL)
+    if (pe_section_ptr_array == NULL)
         return FALSE;
 
     for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
     {
-        pe_sections[i] = (PIMAGE_SECTION_HEADER)(((PBYTE)img_nt_hdrs) + 4 + 20 + img_file_hdr.SizeOfOptionalHeader + (i * IMAGE_SIZEOF_SECTION_HEADER));
+        pe_section_ptr_array[i] = (PIMAGE_SECTION_HEADER)(((PBYTE)img_nt_hdrs) + 4 + 20 + img_file_hdr.SizeOfOptionalHeader + (i * IMAGE_SIZEOF_SECTION_HEADER));
     }
 
     for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
     {
-        custom_memcpy_classic(
-            (PVOID)(reflective_dll_base + pe_sections[i]->VirtualAddress),
-            (PVOID)(current_module_base + pe_sections[i]->PointerToRawData),
-            pe_sections[i]->SizeOfRawData
-        );
+
+		custom_memcpy_classic(
+			(PVOID)(reflective_dll_base + pe_section_ptr_array[i]->VirtualAddress),
+			(PVOID)(current_module_base + pe_section_ptr_array[i]->PointerToRawData),
+			pe_section_ptr_array[i]->SizeOfRawData
+		);
     }
     
+	//custom_memzero(
+	//	(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
+	//	dll_hdr->funcSize
+	//);
     
     char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
     
@@ -1214,54 +1219,54 @@ PBYTE ReflectiveFunction()
     for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
     {
 
-        if ((SIZE_T)pe_sections[i]->SizeOfRawData == 0)
+        if ((SIZE_T)pe_section_ptr_array[i]->SizeOfRawData == 0)
             continue;
 
         // write
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
         {
             section_protection = PAGE_WRITECOPY;
         }
 
         //read
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ)
         {
             section_protection = PAGE_READONLY;
         }
 
         // execute
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
         {
             section_protection = PAGE_EXECUTE;
         }
 
         // read and  write
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
-            && pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ
+            && pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
         {
             section_protection = PAGE_READWRITE;
         }
 
         // execute and write
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
-            && pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
+            && pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
         {
             section_protection = PAGE_EXECUTE_WRITECOPY;
         }
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
-            && pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ
+            && pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE)
         {
             section_protection = PAGE_EXECUTE_READ;
         }
-        if (pe_sections[i]->Characteristics & IMAGE_SCN_MEM_READ
-            && pe_sections[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
-            && pe_sections[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
+        if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_READ
+            && pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_EXECUTE
+            && pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
         {
             section_protection = PAGE_EXECUTE_READWRITE;
         }
 
-        mem_addr_for_syscall = (PVOID)(reflective_dll_base + pe_sections[i]->VirtualAddress);
-        payload_size_for_syscall = (SIZE_T)pe_sections[i]->SizeOfRawData;
+        mem_addr_for_syscall = (PVOID)(reflective_dll_base + pe_section_ptr_array[i]->VirtualAddress);
+        payload_size_for_syscall = (SIZE_T)pe_section_ptr_array[i]->SizeOfRawData;
 
         if ((status = ZwProtectVirtualMemory(
             ((HANDLE)(LONG_PTR)-1),

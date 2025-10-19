@@ -67,24 +67,12 @@ void custom_sstr(CHAR str[], int start, int length, CHAR result[]) {
     result[i] = '\0'; // Null-terminate the result string
 }
 
+void custom_memzero(void* ptr, unsigned int size) {
+    unsigned char* p = (unsigned char*)ptr;
 
-
-void* custom_memcpy(void* pDestination, void* pSource, size_t sLength, PBYTE toZero, SIZE_T lentgh) {
-
-    PBYTE D = (PBYTE)pDestination;
-    PBYTE S = (PBYTE)pSource;
-
-    while (sLength--) {
-        if (S > toZero && S < (toZero + (DWORD)lentgh))
-        {
-            *D++ = 0x0;
-        }
-        else {
-            *D++ = *S++;
-        }
+    while (size--) {
+        *p++ = 0;
     }
-
-    return pDestination;
 }
 
 void custom_memcpy_classic(void* pDestination, void* pSource, size_t sLength) {
