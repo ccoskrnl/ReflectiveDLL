@@ -1851,6 +1851,9 @@ static std::vector<char> load_local_file(const std::string& file_path)
 int main(void) 
 {
 
+    char rfl_dll_name[] = "D:\\files\\projects\\ReflectiveDLL\\x64\\Release\\Reflective.dll";
+    HMODULE rfl_dll = LoadLibraryA(rfl_dll_name);
+
     std::string filePath = "D:\\files\\projects\\ReflectiveDLL\\x64\\Debug\\test.exe";
 
     std::vector<char> pefile = load_local_file(filePath);
