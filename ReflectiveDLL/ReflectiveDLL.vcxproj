@@ -148,6 +148,9 @@
       </ModuleDefinitionFile>
       <DataExecutionPrevention>false</DataExecutionPrevention>
       <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

