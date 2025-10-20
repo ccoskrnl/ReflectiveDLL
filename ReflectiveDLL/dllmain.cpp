@@ -431,12 +431,13 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 			default:
 				break;
 			}
+
+            reloc_entry += 1;
 		}
 
 		img_reloc = (PIMAGE_BASE_RELOCATION)(reinterpret_cast<DWORD_PTR>(img_reloc) + img_reloc->SizeOfBlock);
 
 	}
-
 
 
 	/* Adjust memory protections basing on section headers. */
@@ -722,8 +723,6 @@ bool init_nt_func_s(PNT_FUNCTIONS nt_func_s)
 
 static BOOL custom_process_attach(HMODULE hModule)
 {
-	void** buggy = 0;
-	*buggy = (void*)hModule;
 
 	PSAC_DLL_HEADER sac_dll_header = NULL;
 
