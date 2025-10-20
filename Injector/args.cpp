@@ -12,7 +12,23 @@ i_arg_t argument_parser(int argc, char* argv[]) {
 	for (int i = 1; i < argc; i++) {
 		std::string arg = argv[i];
 
-		if (arg == "--url" || arg == "-u") {
+		if (arg == "--help" || arg == "-h") {
+			std::cout << "Usage: " << argv[0] << " [OPTIONS]\n"
+				<< "Inject DLL into a target process.\n\n"
+				<< "Options:\n"
+				<< "  -h, --help           Show this help message and exit\n"
+				<< "  -u, --url URL        Specify DLL URL for remote download\n"
+				<< "  -f, --file FILE      Specify local DLL filename\n"
+				<< "  -p, --process NAME   Target process name to inject into\n"
+				<< "      --local          Enable local injection mode\n\n"
+				<< "Examples:\n"
+				<< "  " << argv[0] << " --file mydll.dll --process target.exe\n"
+				<< "  " << argv[0] << " --url http://example.com/mydll.dll --process game.exe\n"
+				<< "  " << argv[0] << " --file payload.dll --local\n";
+			exit(0);
+		}
+
+		else if (arg == "--url" || arg == "-u") {
 			if (i + 1 < argc) {
 				args.dll_src = dll_path_type::url;
 				args.url = argv[i + 1];

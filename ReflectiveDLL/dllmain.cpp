@@ -3,6 +3,7 @@
 #include "misc.h"
 #include "hwbp.h"
 #include "syscalls.h"
+#include "swappala.h"
 #include "sleaping.h"
 #include <stdint.h>
 
@@ -741,7 +742,6 @@ static BOOL custom_process_attach(HMODULE hModule)
 
 	PBYTE old_memory = (PBYTE)sac_dll_header->to_free;
 
-	sac_dll_base = (PBYTE)(sac_dll_header + 1);
 
 	// remove the very first buffer allocated for the reflective dll
 	if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)

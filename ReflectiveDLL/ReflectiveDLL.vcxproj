@@ -166,6 +166,7 @@
     <ClInclude Include="misc.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="sleaping.h" />
+    <ClInclude Include="swappala.h" />
     <ClInclude Include="syscalls.h" />
   </ItemGroup>
   <ItemGroup>

