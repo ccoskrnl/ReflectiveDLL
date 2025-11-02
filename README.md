@@ -2,6 +2,8 @@
 
 反射DLL是一种高级的DLL加载技术，它通过模拟Windows加载器的工作流程，实现了从内存中直接加载DLL。通过使用Native API来达到隐蔽性的目的，并直接跳转到syscall来绕过常规的API监控。通过`sleaping`函数延迟映射恶意DLL来绕过EDR的内存扫描。可以用于APT和复杂的恶意软件中，在目标系统中长期驻留。
 
+这项技术并非一个简单的“注入工具”，而是一个高级的、旨在实现深度隐蔽和持久化驻留的恶意代码框架。它的设计目标直指现代安全检测（如EDR、AV）的盲区。
+
 
 
 ## 演示
@@ -44,6 +46,8 @@ NOTES:
 
 
 ## 介绍
+
+[详细介绍](https://ccoskrnl.github.io/notes/Computer_Security/software/reflective_dll/main.html)
 
 **注入器**
 

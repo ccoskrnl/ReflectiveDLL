@@ -168,6 +168,7 @@
     <ClInclude Include="sleaping.h" />
     <ClInclude Include="swappala.h" />
     <ClInclude Include="syscalls.h" />
+    <ClInclude Include="test.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />

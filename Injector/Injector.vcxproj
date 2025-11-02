@@ -135,6 +135,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dll.h" />
+    <ClInclude Include="injector.h" />
     <ClInclude Include="utils.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="args.h" />

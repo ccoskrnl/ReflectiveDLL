@@ -1984,7 +1984,32 @@ static std::vector<char> load_local_file(const std::string& file_path)
     return buffer;
 }
 
-int main(void) 
+
+
+typedef HMODULE(*func_def_GetModuleHandle_t)(WCHAR wstr_module_name[]);
+typedef FARPROC(*func_def_GetProcAddress_t)(HMODULE hm, CHAR func_name[]);
+typedef void(*func_def_message_box_t)(void*, void*, void*, void*);
+void test_pic_call(func_def_GetModuleHandle_t func_get_module_handle, func_def_GetProcAddress_t func_get_proc_addr)
+{
+
+	WCHAR str_Kernel32[] = { L'K', L'e', L'r', L'n', L'e', L'l', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
+	WCHAR str_ntdll[] = { L'n', L't', L'd', L'l', L'l', L'.', L'd', L'l', L'l', L'\0' };
+	WCHAR str_user32[] = { L'U', L's', L'e', L'r', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
+	CHAR str_RtlAddFunctionTable[] = { 'R', 't', 'l', 'A', 'd', 'd', 'F', 'u', 'n', 'c', 't', 'i', 'o', 'n', 'T', 'a', 'b', 'l', 'e', '\0' };
+	CHAR str_MessageBoxA[] = { 'M', 'e', 's', 's', 'a', 'g', 'e', 'B', 'o', 'x', 'A','\0' };
+	CHAR str_LoadLibraryExA[] = { 'L', 'o', 'a', 'd', 'L', 'i', 'b', 'r', 'a', 'r', 'y', 'E', 'x', 'A','\0' };
+	CHAR str_GetProcessId[] = { 'G', 'e', 't', 'P', 'r', 'o', 'c', 'e', 's', 's', 'I', 'd', '\0' };
+
+	HMODULE hm_user32 = func_get_module_handle(str_user32);
+	func_def_message_box_t func_message_box = (func_def_message_box_t)func_get_proc_addr(hm_user32, str_MessageBoxA);
+	func_message_box(0, 0, 0, 0);
+
+
+}
+
+typedef void(*func_def_test_pic_call_t)(func_def_GetModuleHandle_t func_get_module_handle, func_def_GetProcAddress_t func_get_proc_addr);
+
+int test_sleaping(void) 
 {
 
     char rfl_dll_name[] = "D:\\files\\projects\\ReflectiveDLL\\x64\\Release\\Reflective.dll";
@@ -2050,4 +2075,44 @@ int main(void)
     } while (true);
 
 	return 0;
+}
+
+int main()
+{
+    void* func_mem = VirtualAlloc(NULL, 0x10000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!func_mem)
+    {
+        return -1;
+    }
+
+    ULONG_PTR current_module_base = (ULONG_PTR)main;
+    PIMAGE_DOS_HEADER img_dos_hdr = NULL;
+    PIMAGE_NT_HEADERS img_nt_hdr = NULL;
+    while (1)
+    {
+        img_dos_hdr = (PIMAGE_DOS_HEADER)(current_module_base);
+        if (img_dos_hdr->e_magic == IMAGE_DOS_SIGNATURE)
+        {
+            img_nt_hdr = (PIMAGE_NT_HEADERS)(current_module_base + img_dos_hdr->e_lfanew);
+            if (img_nt_hdr->Signature == IMAGE_NT_SIGNATURE)
+            {
+                break;
+            }
+        }
+
+        current_module_base--;
+    }
+
+    if (!current_module_base)
+        return -1;
+
+    PBYTE func_raw_ptr = (PBYTE)test_pic_call;
+    PBYTE func_raw_end_ptr = NULL;
+
+    memcpy(func_mem, func_raw_ptr, 0x2000);
+
+    func_def_test_pic_call_t func_test_pic_call = (func_def_test_pic_call_t)func_mem;
+    //func_test_pic_call((func_def_GetModuleHandle_t)GetModuleHandleW, (func_def_GetProcAddress_t)GetProcAddress);
+    test_pic_call((func_def_GetModuleHandle_t)GetModuleHandleW, (func_def_GetProcAddress_t)GetProcAddress);
+    
 }
