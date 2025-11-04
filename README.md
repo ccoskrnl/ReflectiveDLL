@@ -123,7 +123,7 @@ Main thread
 
 ## 参考
 
-*   [oldboy21/RflDllOb]([oldboy21/RflDllOb: Reflective DLL Injection Made Bella](https://github.com/oldboy21/RflDllOb))
+* [oldboy21/RflDllOb: Reflective DLL Injection Made Bella](https://github.com/oldboy21/RflDllOb)
 
 * [YOLO: You Only Load Once](https://oldboy21.github.io/posts/2024/01/yolo-you-only-load-once/)
 * [Reflective DLL Got Indirect Syscall skills](https://oldboy21.github.io/posts/2024/02/reflective-dll-got-indirect-syscall-skills/) 

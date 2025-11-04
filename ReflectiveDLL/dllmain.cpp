@@ -337,13 +337,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		);
 	}
 
-	custom_memzero(
-		(PBYTE)(resolve_jmp_to_actual_function(ReflectiveFunction)),
-		dll_hdr->funcSize
-	);
-
     
-    char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
+    //char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
     
 
 	/* FIX IAT TABLE */
@@ -356,8 +351,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
         char* import_module_name = (LPSTR)(reflective_dll_base + img_imp_desc->Name);
 
-        if (str_icmp(import_module_name, str_msvcp140d))
-            continue;
+        //if (str_icmp(import_module_name, str_msvcp140d))
+        //    continue;
 
 		dll = func_LoadLibraryA((LPSTR)(reflective_dll_base + img_imp_desc->Name));
 		if (dll == NULL)
@@ -781,7 +776,7 @@ static BOOL custom_process_attach(HMODULE hModule)
 
 	do
 	{
-		MessageBoxA(NULL, "Sleaping", "Swappala", MB_OK | MB_ICONINFORMATION);
+		MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
 		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
 		{
 			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
