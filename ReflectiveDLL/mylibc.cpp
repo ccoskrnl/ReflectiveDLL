@@ -1,5 +1,5 @@
-#include "../pch.h"
-#include "../framework.h"
+#include "pch.h"
+#include "mylibc.h"
 
 long long int my_strlen(const char* s) {
     const char* p = s;
@@ -44,7 +44,7 @@ int my_lltoa(long long value, char* buf, int base) {
     return j;
 }
 
-char* my_strncat(char* dest, const char* src, SIZE_T n) {
+char* my_strncat(char* dest, const char* src, size_t n) {
     if (dest == NULL || src == NULL || n == 0) {
         return dest;
     }
@@ -74,11 +74,12 @@ char* my_strncat(char* dest, const char* src, SIZE_T n) {
 void* my_malloc(SIZE_T size)
 {
     void* addr = VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    return addr;
 }
 
 void my_free(void* addr)
 {
-	VirtualFree(addr, 0, MEM_RELEASE);
+    VirtualFree(addr, 0, MEM_RELEASE);
 }
 
 /* 将内存块的前 n 个字节设置为指定值 */

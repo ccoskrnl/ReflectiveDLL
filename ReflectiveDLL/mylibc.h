@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../pch.h"
+#include "pch.h"
 
 long long int my_strlen(const char* s);
 

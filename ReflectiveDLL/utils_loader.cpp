@@ -187,6 +187,8 @@ bool load_kernel32_functions(kernel32_functions_t* kernel_funcs)
 		return false;
 	}
 
+	kernel_funcs->GetLastError = (GETLASTERROR_FN)GetProcAddress(kernel_funcs->hKernel32, "GetLastError");
+
 	// 获取基础函数地址
 	kernel_funcs->Sleep = (SLEEP_FN)GetProcAddress(kernel_funcs->hKernel32, "Sleep");
 	kernel_funcs->GetTickCount = (GETTICKCOUNT_FN)GetProcAddress(kernel_funcs->hKernel32, "GetTickCount");
@@ -199,6 +201,7 @@ bool load_kernel32_functions(kernel32_functions_t* kernel_funcs)
 	// 获取文件操作函数地址
 	kernel_funcs->CreateFileA = (CREATEFILE_FN)GetProcAddress(kernel_funcs->hKernel32, "CreateFileA");
 	kernel_funcs->WriteFile = (WRITEFILE_FN)GetProcAddress(kernel_funcs->hKernel32, "WriteFile");
+	kernel_funcs->ReadFile = (READFILE_FN)GetProcAddress(kernel_funcs->hKernel32, "ReadFile");
 	kernel_funcs->CloseHandle = (CLOSEHANDLE_FN)GetProcAddress(kernel_funcs->hKernel32, "CloseHandle");
 	kernel_funcs->GetFileSize = (GETFILESIZE_FN)GetProcAddress(kernel_funcs->hKernel32, "GetFileSize");
 	kernel_funcs->SetFilePointer = (SETFILEPOINTER_FN)GetProcAddress(kernel_funcs->hKernel32, "SetFilePointer");
@@ -231,6 +234,8 @@ void unload_kernel32_functions(kernel32_functions_t* kernel_funcs)
 			kernel_funcs->hKernel32 = NULL;
 		}
 
+		kernel_funcs->GetLastError = NULL;
+
 		// 清空所有函数指针
 		kernel_funcs->Sleep = NULL;
 		kernel_funcs->GetTickCount = NULL;
@@ -242,6 +247,7 @@ void unload_kernel32_functions(kernel32_functions_t* kernel_funcs)
 
 		kernel_funcs->CreateFileA = NULL;
 		kernel_funcs->WriteFile = NULL;
+		kernel_funcs->ReadFile = NULL;
 		kernel_funcs->CloseHandle = NULL;
 		kernel_funcs->GetFileSize = NULL;
 		kernel_funcs->SetFilePointer = NULL;
@@ -269,6 +275,7 @@ bool load_winsock_functions(winsock_functions_t* ws_funcs)
 	}
 	ws_funcs->hWinsock = winsock_dll;
 
+	ws_funcs->WSAGetLastError = (WSAGETLASTERROR_FN)GetProcAddress(winsock_dll, "WSAGetLastError");
 	ws_funcs->WSAStartup = (WSASTARTUP_FN)GetProcAddress(winsock_dll, "WSAStartup");
 	ws_funcs->Socket = (SOCKET_FN)GetProcAddress(winsock_dll, "socket");
 	ws_funcs->Connect = (CONNECT_FN)GetProcAddress(winsock_dll, "connect");
@@ -283,7 +290,9 @@ bool load_winsock_functions(winsock_functions_t* ws_funcs)
 	ws_funcs->Inet_addr = (INET_ADDR_FN)GetProcAddress(winsock_dll, "inet_addr");
 	ws_funcs->Inet_ntoa = (INET_NTOA_FN)GetProcAddress(winsock_dll, "inet_ntoa");
 	ws_funcs->Inet_pton = (INET_PTON_FN)GetProcAddress(winsock_dll, "inet_pton");
-
+	ws_funcs->ioctlsocket = (IOCTLSOCKET_FN)GetProcAddress(winsock_dll, "ioctlsocket");
+	ws_funcs->setsockopt = (SETSOCKOPT_FN)GetProcAddress(winsock_dll, "setsockopt");
+	ws_funcs->select = (SELECT_FN)GetProcAddress(winsock_dll, "select");
 
 	uint64_t* funcs_start = (uint64_t*)ws_funcs;
 	int num = sizeof(*ws_funcs) / sizeof(void*);
@@ -310,6 +319,8 @@ void unload_winsock_functions(winsock_functions_t* ws_funcs)
 		}
 
 		// 清空所有函数指针
+		ws_funcs->WSAGetLastError = NULL;
+
 		ws_funcs->WSAStartup = NULL;
 		ws_funcs->Socket = NULL;
 		ws_funcs->Connect = NULL;
@@ -324,5 +335,9 @@ void unload_winsock_functions(winsock_functions_t* ws_funcs)
 		ws_funcs->Inet_addr = NULL;
 		ws_funcs->Inet_ntoa = NULL;
 		ws_funcs->Inet_pton = NULL;
+
+		ws_funcs->setsockopt = NULL;
+		ws_funcs->ioctlsocket = NULL;
+		ws_funcs->select = NULL;
 	}
 }

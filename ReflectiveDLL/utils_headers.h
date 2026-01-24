@@ -50,6 +50,7 @@ typedef struct _user32_functions
 } user32_functions_t;
 
 
+typedef int (WINAPI* WSAGETLASTERROR_FN)(void);
 typedef int (WINAPI* WSASTARTUP_FN)(WORD, LPWSADATA);
 typedef SOCKET(WINAPI* SOCKET_FN)(int, int, int);
 typedef int (WINAPI* CONNECT_FN)(SOCKET, const struct sockaddr*, int);
@@ -64,10 +65,32 @@ typedef u_short(WINAPI* HTONS_FN)(u_short);
 typedef unsigned long (WINAPI* INET_ADDR_FN)(const char*);
 typedef char* (WINAPI* INET_NTOA_FN)(struct in_addr);
 typedef int (WINAPI* INET_PTON_FN)(int, const char*, void*);
+typedef int (WINAPI* SETSOCKOPT_FN)(
+	SOCKET     s,
+	int        level,
+	int        optname,
+	const char* optval,
+	int        optlen
+);
+typedef int (WSAAPI* IOCTLSOCKET_FN)(
+	SOCKET s,
+	long   cmd,
+	u_long* argp
+);
+
+typedef int (WSAAPI* SELECT_FN)(
+	int           nfds,
+	fd_set* readfds,
+	fd_set* writefds,
+	fd_set* exceptfds,
+	const timeval* timeout
+);
+
 
 typedef struct _winsock_functions
 {
 
+	WSAGETLASTERROR_FN WSAGetLastError = NULL;
 	WSASTARTUP_FN WSAStartup = NULL;
 	SOCKET_FN Socket = NULL;
 	CONNECT_FN Connect = NULL;
@@ -82,18 +105,28 @@ typedef struct _winsock_functions
 	INET_ADDR_FN Inet_addr = NULL;
 	INET_NTOA_FN Inet_ntoa = NULL;
 	INET_PTON_FN Inet_pton = NULL;
+	SETSOCKOPT_FN setsockopt = NULL;
+	IOCTLSOCKET_FN ioctlsocket = NULL;
+	SELECT_FN select = NULL;
 
 	HMODULE hWinsock = { 0 };
 
 } winsock_functions_t;
 
+typedef DWORD(WINAPI* GETLASTERROR_FN)(void);
 
 typedef void (WINAPI* SLEEP_FN)(DWORD dwMilliseconds);
+
 typedef DWORD(WINAPI* GETTICKCOUNT_FN)(void);
+
 typedef BOOL(WINAPI* QUERYPERFORMANCECOUNTER_FN)(LARGE_INTEGER* lpPerformanceCount);
+
 typedef BOOL(WINAPI* QUERYPERFORMANCEFREQUENCY_FN)(LARGE_INTEGER* lpFrequency);
+
 typedef HLOCAL(WINAPI* LOCALLOCK_FN)(HLOCAL hMem);
+
 typedef BOOL(WINAPI* LOCALUNLOCK_FN)(HLOCAL hMem);
+
 typedef HLOCAL(WINAPI* LOCALFREE_FN)(HLOCAL hMem);
 
 // KERNEL32 文件操作函数指针类型
@@ -101,19 +134,29 @@ typedef HANDLE(WINAPI* CREATEFILE_FN)(LPCSTR lpFileName, DWORD dwDesiredAccess,
 	DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes,
 	DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
 	HANDLE hTemplateFile);
+
 typedef BOOL(WINAPI* WRITEFILE_FN)(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite,
 	LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+
 typedef BOOL(WINAPI* CLOSEHANDLE_FN)(HANDLE hObject);
+
 typedef DWORD(WINAPI* GETFILESIZE_FN)(HANDLE hFile, LPDWORD lpFileSizeHigh);
+
 typedef DWORD(WINAPI* SETFILEPOINTER_FN)(HANDLE hFile, LONG lDistanceToMove,
 	PLONG lpDistanceToMoveHigh, DWORD dwMoveMethod);
+
 typedef BOOL(WINAPI* FLUSHFILEBUFFERS_FN)(HANDLE hFile);
 
+typedef BOOL(WINAPI* READFILE_FN)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+
 typedef DWORD(WINAPI* GETTEMPPATHA_FN)(DWORD nBufferLength, LPSTR lpBuffer);
+
 typedef BOOL(WINAPI* DELETEFILEA_FN)(LPCSTR lpFileName);
 
 typedef struct _kernel32_functions
 {
+
+	GETLASTERROR_FN GetLastError = NULL;
 
 	SLEEP_FN Sleep = NULL;
 	GETTICKCOUNT_FN GetTickCount = NULL;
@@ -126,6 +169,7 @@ typedef struct _kernel32_functions
 	// 文件操作函数
 	CREATEFILE_FN CreateFileA = NULL;
 	WRITEFILE_FN WriteFile = NULL;
+	READFILE_FN ReadFile = NULL;
 	CLOSEHANDLE_FN CloseHandle = NULL;
 	GETFILESIZE_FN GetFileSize = NULL;
 	SETFILEPOINTER_FN SetFilePointer = NULL;

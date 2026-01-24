@@ -13,12 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="头文件\mylibc">
-      <UniqueIdentifier>{058d9084-0596-4c16-a76e-0e8b5d9852d5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="源文件\mylibc">
-      <UniqueIdentifier>{1e2976b3-82f0-4235-961c-0bee5383bcb0}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -54,8 +48,8 @@
     <ClInclude Include="utils_headers.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="mylibc\mylibc.h">
-      <Filter>头文件\mylibc</Filter>
+    <ClInclude Include="mylibc.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -74,8 +68,8 @@
     <ClCompile Include="utils_loader.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="mylibc\mylibc.c">
-      <Filter>源文件\mylibc</Filter>
+    <ClCompile Include="mylibc.cpp">
+      <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
