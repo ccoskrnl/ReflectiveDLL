@@ -1,9 +1,6 @@
 #include "utils.h"
 #include <stdlib.h>
 #include <stdint.h>
-#include <ws2tcpip.h>
-
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 int keep_alive_loop(SOCKET sock)
 {

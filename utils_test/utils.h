@@ -1,7 +1,7 @@
 #pragma once
 
-#include <winsock2.h>
-#include <windows.h>
+#include "framework.h"
+
 #include <stdio.h>
 #include <time.h>
 #include <direct.h>

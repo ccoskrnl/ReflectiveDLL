@@ -182,6 +182,7 @@
     </ClCompile>
     <ClCompile Include="sleaping.cpp" />
     <ClCompile Include="utils.cpp" />
+    <ClCompile Include="utils_loader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
