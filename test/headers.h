@@ -1052,5 +1052,5 @@ typedef struct _NT_FUNCTIONS
     NtQueryObjectFunc NtQueryObject;
     NtQueryInformationWorkerFactoryFunc NtQueryInformationWorkerFactory;
 
-} NT_FUNCTIONS, * PNT_FUNCTIONS;
+} nt_functions_t, * PNT_FUNCTIONS;
 

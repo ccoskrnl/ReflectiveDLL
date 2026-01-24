@@ -2048,7 +2048,7 @@ int test_sleaping(void)
     // }
 
     // initialize all the NtFunctions
-    NT_FUNCTIONS nt_func_s = { 0 };
+    nt_functions_t nt_func_s = { 0 };
     if (!init_nt_func_s(&nt_func_s))
     {
         return FALSE;

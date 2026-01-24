@@ -848,6 +848,9 @@ typedef struct _MEMORY_RANGE_ENTRY
 } MEMORY_RANGE_ENTRY, * PMEMORY_RANGE_ENTRY;
 
 
+typedef NTSTATUS(NTAPI* NtTestAlertFunc)(
+    VOID
+);
 
 typedef NTSTATUS(NTAPI* NtSetContextThreadFunc)(
     HANDLE ThreadHandle,
@@ -1052,8 +1055,9 @@ typedef struct _NT_FUNCTIONS
     NtQuerySystemInformationFunc NtQuerySystemInformation;
     NtQueryObjectFunc NtQueryObject;
     NtQueryInformationWorkerFactoryFunc NtQueryInformationWorkerFactory;
+    NtTestAlertFunc NtTestAlert;
 
-} NT_FUNCTIONS, * PNT_FUNCTIONS;
+} nt_functions_t, * PNT_FUNCTIONS;
 
 
 

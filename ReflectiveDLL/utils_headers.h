@@ -18,6 +18,7 @@ typedef SOCKET(WINAPI* ACCEPT_FN)(SOCKET, struct sockaddr*, int*);
 typedef u_short(WINAPI* HTONS_FN)(u_short);
 typedef unsigned long (WINAPI* INET_ADDR_FN)(const char*);
 typedef char* (WINAPI* INET_NTOA_FN)(struct in_addr);
+typedef int (WINAPI* INET_PTON_FN)(int, const char*, void*);
 
 typedef struct _winsock_functions
 {
@@ -35,5 +36,16 @@ typedef struct _winsock_functions
 	HTONS_FN Htons = NULL;
 	INET_ADDR_FN Inet_addr = NULL;
 	INET_NTOA_FN Inet_ntoa = NULL;
+	INET_PTON_FN Inet_pton = NULL;
 
 } winsock_functions_t;
+
+
+typedef void (WINAPI* SLEEP_FN)(DWORD dwMilliseconds);
+
+typedef struct _core_functions
+{
+
+	SLEEP_FN Sleep = NULL;
+
+} core_funtions_t;

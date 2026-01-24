@@ -84,39 +84,121 @@ int sleaping(
 
 ```
 Main thread
-    │
-    ├─ Initialization phase (0-several ms)
-    │   ├─ Create event object
-    │   ├─ Allocate CONTEXT memory
-    │   └─ Create thread 2 (suspended state)
-    │
-    ├─ Configure thread 2
-    │   ├─ Get thread context
-    │   ├─ Modify to WaitForSingleObjectEx(NtTestAlert returns)
-    │   └─ Resume thread 2 execution
-    │
-    ├─ Create other threads
-    │   ├─ CreateThread0 (suspended): UnmapViewOfFile
-    │   ├─ CreateThread1 (suspended): MapViewOfFileEx(sac_dll)
-    │   └─ CreateThread3 (suspended): MapViewOfFileEx(mal_dll)
-    │
-    ├─ Configure thread context
-    │   ├─ Thread 0: UnmapViewOfFile(image_base)
-    │   ├─ Thread 1: MapViewOfFileEx(sac_dll→image_base)
-    │   └─ Thread 3: MapViewOfFileEx(mal_dll→image_base)
-    │
-    ├─ Create timer queue
-    │
-    ├─ Set APC queue (thread 2)
-    │   ├─ APC1: UnmapViewOfFile(image_base)
-    │   ├─ APC2: ResumeThread (Thread 3)
-    │   └─ APC3: ExitThread (thread 2 itself)
-    │
-    ├─ Set timer
-    │   ├─ Timer 1 (200ms): ResumeThread (Thread 0)
-    │   └─ Timer 2 (300ms): ResumeThread (Thread 1)
-    │
-    └─ Wait for all threads to complete
+    |
+    +-- Initialization phase (0-several ms)
+    |    +-- Create event object
+    |    +-- Allocate CONTEXT memory
+    |    +-- Create thread 2 (suspended state)
+    |
+    +-- Configure thread 2
+    |    +-- Get thread context
+    |    +-- Modify to WaitForSingleObjectEx(NtTestAlert returns)
+    |    +-- Resume thread 2 execution
+    |
+    +-- Create other threads
+    |    +-- CreateThread0 (suspended): UnmapViewOfFile
+    |    +-- CreateThread1 (suspended): MapViewOfFileEx(sac_dll)
+    |    +-- CreateThread3 (suspended): MapViewOfFileEx(mal_dll)
+    |
+    +-- Configure thread context
+    |    +-- Thread 0: UnmapViewOfFile(image_base)
+    |    +-- Thread 1: MapViewOfFileEx(sac_dll->image_base)
+    |    +-- Thread 3: MapViewOfFileEx(mal_dll->image_base)
+    |
+    +-- Create timer queue
+    |
+    +-- Set APC queue (thread 2)
+    |    +-- APC1: UnmapViewOfFile(image_base)
+    |    +-- APC2: ResumeThread (Thread 3)
+    |    +-- APC3: ExitThread (thread 2 itself)
+    |
+    +-- Set timer
+    |    +-- Timer 1 (200ms): ResumeThread (Thread 0)
+    |    +-- Timer 2 (300ms): ResumeThread (Thread 1)
+    |
+    +-- Wait for all threads to complete
+```
+
+## 注意
+
+当使用注入器将DLL注入到其他进程时，执行DLL的线程不能直接调用所有的Win32API或其他库。只有DLL预先被导入的函数才可以直接调用，这些函数可以通过解析DLL的导入表查看。如果要调用其他DLL的函数，比如`ws2_32.dll`的网络通信函数，必须通过`LoadLibrary`和`GetProcAddress`手动获取需要使用的函数地址，然后再调用。可以使用以下方法：
+
+```c++
+typedef int (WINAPI* WSASTARTUP_FN)(WORD, LPWSADATA);
+typedef SOCKET(WINAPI* SOCKET_FN)(int, int, int);
+typedef int (WINAPI* CONNECT_FN)(SOCKET, const struct sockaddr*, int);
+typedef int (WINAPI* SEND_FN)(SOCKET, const char*, int, int);
+typedef int (WINAPI* RECV_FN)(SOCKET, char*, int, int);
+typedef int (WINAPI* CLOSESOCKET_FN)(SOCKET);
+typedef int (WINAPI* WSACLEANUP_FN)(void);
+typedef int (WINAPI* BIND_FN)(SOCKET, const struct sockaddr*, int);
+typedef int (WINAPI* LISTEN_FN)(SOCKET, int);
+typedef SOCKET(WINAPI* ACCEPT_FN)(SOCKET, struct sockaddr*, int*);
+typedef u_short(WINAPI* HTONS_FN)(u_short);
+typedef unsigned long (WINAPI* INET_ADDR_FN)(const char*);
+typedef char* (WINAPI* INET_NTOA_FN)(struct in_addr);
+typedef int (WINAPI* INET_PTON_FN)(int, const char*, void*);
+
+typedef struct _winsock_functions
+{
+
+	WSASTARTUP_FN WSAStartup = NULL;
+	SOCKET_FN Socket = NULL;
+	CONNECT_FN Connect = NULL;
+	SEND_FN Send = NULL;
+	RECV_FN Recv = NULL;
+	CLOSESOCKET_FN CloseSocket = NULL;
+	WSACLEANUP_FN WSACleanup = NULL;
+	BIND_FN Bind = NULL;
+	LISTEN_FN Listen = NULL;
+	ACCEPT_FN Accept = NULL;
+	HTONS_FN Htons = NULL;
+	INET_ADDR_FN Inet_addr = NULL;
+	INET_NTOA_FN Inet_ntoa = NULL;
+	INET_PTON_FN Inet_pton = NULL;
+
+} winsock_functions_t;
+
+	
+bool load_winsock_functions(winsock_functions_t* ws_funcs)
+{
+	HMODULE winsock_dll = NULL;
+	winsock_dll = LoadLibraryA("ws2_32.dll");
+	if (winsock_dll == NULL)
+	{
+		return false;
+	}
+
+	ws_funcs->WSAStartup = (WSASTARTUP_FN)GetProcAddress(winsock_dll, "WSAStartup");
+	ws_funcs->Socket = (SOCKET_FN)GetProcAddress(winsock_dll, "socket");
+	ws_funcs->Connect = (CONNECT_FN)GetProcAddress(winsock_dll, "connect");
+	ws_funcs->Send = (SEND_FN)GetProcAddress(winsock_dll, "send");
+	ws_funcs->Recv = (RECV_FN)GetProcAddress(winsock_dll, "recv");
+	ws_funcs->CloseSocket = (CLOSESOCKET_FN)GetProcAddress(winsock_dll, "closesocket");
+	ws_funcs->WSACleanup = (WSACLEANUP_FN)GetProcAddress(winsock_dll, "WSACleanup");
+	ws_funcs->Bind = (BIND_FN)GetProcAddress(winsock_dll, "bind");
+	ws_funcs->Listen = (LISTEN_FN)GetProcAddress(winsock_dll, "listen");
+	ws_funcs->Accept = (ACCEPT_FN)GetProcAddress(winsock_dll, "accept");
+	ws_funcs->Htons = (HTONS_FN)GetProcAddress(winsock_dll, "htons");
+	ws_funcs->Inet_addr = (INET_ADDR_FN)GetProcAddress(winsock_dll, "inet_addr");
+	ws_funcs->Inet_ntoa = (INET_NTOA_FN)GetProcAddress(winsock_dll, "inet_ntoa");
+	ws_funcs->Inet_pton = (INET_PTON_FN)GetProcAddress(winsock_dll, "inet_pton");
+
+
+	uint64_t* funcs_start = (uint64_t*)ws_funcs;
+	int num = sizeof(*ws_funcs) / sizeof(void*);
+	for (int i = 0; i < num; i++, funcs_start++)
+	{
+		if (*funcs_start == NULL)
+		{
+			FreeLibrary(winsock_dll);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 ```
 
 

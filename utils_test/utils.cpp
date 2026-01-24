@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <ws2tcpip.h>
 
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 int keep_alive_loop(SOCKET sock)
 {
@@ -110,6 +111,7 @@ int init_connection()
 		{
 			goto __exit_1;
 		}
+		//server_addr.sin_addr.s_addr = inet_addr(SERVER_HOSTNAME);
 
 		result = connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
 

@@ -12,6 +12,5 @@ int sleaping(
     HANDLE sac_dll_handle,
     HANDLE mal_dll_handle,
     SIZE_T view_size,
-    PNT_FUNCTIONS nt_func_s,
-    PVOID NtTestAlert_addr
+    PNT_FUNCTIONS nt_func_s
 );

