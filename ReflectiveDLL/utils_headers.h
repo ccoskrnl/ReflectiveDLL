@@ -109,6 +109,8 @@ typedef DWORD(WINAPI* SETFILEPOINTER_FN)(HANDLE hFile, LONG lDistanceToMove,
 	PLONG lpDistanceToMoveHigh, DWORD dwMoveMethod);
 typedef BOOL(WINAPI* FLUSHFILEBUFFERS_FN)(HANDLE hFile);
 
+typedef DWORD(WINAPI* GETTEMPPATHA_FN)(DWORD nBufferLength, LPSTR lpBuffer);
+typedef BOOL(WINAPI* DELETEFILEA_FN)(LPCSTR lpFileName);
 
 typedef struct _kernel32_functions
 {
@@ -128,6 +130,9 @@ typedef struct _kernel32_functions
 	GETFILESIZE_FN GetFileSize = NULL;
 	SETFILEPOINTER_FN SetFilePointer = NULL;
 	FLUSHFILEBUFFERS_FN FlushFileBuffers = NULL;
+
+	GETTEMPPATHA_FN GetTempPathA = NULL;
+	DELETEFILEA_FN DeleteFileA = NULL;
 
 	HMODULE hKernel32 = { 0 };
 

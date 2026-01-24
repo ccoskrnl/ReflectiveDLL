@@ -204,6 +204,9 @@ bool load_kernel32_functions(kernel32_functions_t* kernel_funcs)
 	kernel_funcs->SetFilePointer = (SETFILEPOINTER_FN)GetProcAddress(kernel_funcs->hKernel32, "SetFilePointer");
 	kernel_funcs->FlushFileBuffers = (FLUSHFILEBUFFERS_FN)GetProcAddress(kernel_funcs->hKernel32, "FlushFileBuffers");
 
+	kernel_funcs->GetTempPathA = (GETTEMPPATHA_FN)GetProcAddress(kernel_funcs->hKernel32, "GetTempPathA");
+	kernel_funcs->DeleteFileA = (DELETEFILEA_FN)GetProcAddress(kernel_funcs->hKernel32, "DeleteFileA");
+
 	uint64_t* funcs_start = (uint64_t*)kernel_funcs;
 	int num = sizeof(*kernel_funcs) / sizeof(void*);
 	for (int i = 0; i < num; i++, funcs_start++)
@@ -243,6 +246,9 @@ void unload_kernel32_functions(kernel32_functions_t* kernel_funcs)
 		kernel_funcs->GetFileSize = NULL;
 		kernel_funcs->SetFilePointer = NULL;
 		kernel_funcs->FlushFileBuffers = NULL;
+
+		kernel_funcs->GetTempPathA = NULL;
+		kernel_funcs->DeleteFileA = NULL;
 	}
 }
 
