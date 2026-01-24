@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="test.cpp">
+    <ClCompile Include="utils_test.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="utils.cpp">
@@ -23,22 +23,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="misc.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="syscalls.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="headers.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="utils.h">
       <Filter>头文件</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <MASM Include="syscall.asm">
-      <Filter>源文件</Filter>
-    </MASM>
   </ItemGroup>
 </Project>

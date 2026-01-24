@@ -1055,3 +1055,5 @@ typedef struct _NT_FUNCTIONS
 
 } NT_FUNCTIONS, * PNT_FUNCTIONS;
 
+
+
