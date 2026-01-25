@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "mylibc.h"
+#include <stdint.h>
 
 long long int my_strlen(const char* s) {
     const char* p = s;
@@ -98,4 +99,16 @@ void* my_memset(void* ptr, int value, unsigned long n) {
     }
 
     return ptr;
+}
+
+uint64_t my_byteswap_uint64(uint64_t val) {
+    /* 方法1: 使用移位操作 */
+    return ((val & 0xFF00000000000000ULL) >> 56) |  // 字节0 -> 字节7
+        ((val & 0x00FF000000000000ULL) >> 40) |  // 字节1 -> 字节6
+        ((val & 0x0000FF0000000000ULL) >> 24) |  // 字节2 -> 字节5
+        ((val & 0x000000FF00000000ULL) >> 8) |  // 字节3 -> 字节4
+        ((val & 0x00000000FF000000ULL) << 8) |  // 字节4 -> 字节3
+        ((val & 0x0000000000FF0000ULL) << 24) |  // 字节5 -> 字节2
+        ((val & 0x000000000000FF00ULL) << 40) |  // 字节6 -> 字节1
+        ((val & 0x00000000000000FFULL) << 56);   // 字节7 -> 字节0
 }

