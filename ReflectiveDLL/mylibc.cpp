@@ -112,3 +112,15 @@ uint64_t my_byteswap_uint64(uint64_t val) {
         ((val & 0x000000000000FF00ULL) << 40) |  // 字节6 -> 字节1
         ((val & 0x00000000000000FFULL) << 56);   // 字节7 -> 字节0
 }
+
+/* 比较两个字符串 */
+int my_strcmp(const char* s1, const char* s2) {
+    /* 逐个字符比较，直到遇到不同字符或字符串结束 */
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+
+    /* 返回两个字符的差值 */
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}

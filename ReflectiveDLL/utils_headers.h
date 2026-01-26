@@ -185,10 +185,10 @@ typedef struct _kernel32_functions
 
 typedef struct _global_functions
 {
-	kernel32_functions_t krnl_funcs;
-	winsock_functions_t ws_funcs;
-	gdi32_functions_t gdi32_funcs;
-	user32_functions_t user32_funcs;
+	kernel32_functions_t kernel32;
+	winsock_functions_t ws2;
+	gdi32_functions_t gdi32;
+	user32_functions_t user32;
 } global_functions_t;
 
 bool load_nt_functions(PNT_FUNCTIONS nt_funcs);

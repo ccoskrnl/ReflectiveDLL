@@ -16,3 +16,5 @@ void my_free(void* addr);
 void* my_memset(void* ptr, int value, unsigned long n);
 
 uint64_t my_byteswap_uint64(uint64_t val);
+
+int my_strcmp(const char* s1, const char* s2);

