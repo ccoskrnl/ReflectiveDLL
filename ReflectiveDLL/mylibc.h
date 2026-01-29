@@ -18,3 +18,6 @@ void* my_memset(void* ptr, int value, unsigned long n);
 uint64_t my_byteswap_uint64(uint64_t val);
 
 int my_strcmp(const char* s1, const char* s2);
+
+#define my_min(a, b)			((a) > (b) ? (b) : (a))
+#define my_max(a, b)			((a) < (b) ? (b) : (a))

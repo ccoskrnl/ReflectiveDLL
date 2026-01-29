@@ -1,9 +1,7 @@
-#include "framework.h"
 #include "pch.h"
-#include "utils.h"
-#include "utils_headers.h"
+#include "framework.h"
 #include "headers.h"
-#include "sleaping.h"
+#include "dll_headers.h"
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -275,20 +273,23 @@ bool load_winsock_functions(winsock_functions_t* ws2)
 	}
 	ws2->hWinsock = winsock_dll;
 
-	ws2->WSAGetLastError = (WSAGETLASTERROR_FN)GetProcAddress(winsock_dll, "WSAGetLastError");
-	ws2->WSAStartup = (WSASTARTUP_FN)GetProcAddress(winsock_dll, "WSAStartup");
+	ws2->WSAGetLastError = (WSAGetLastError_FN)GetProcAddress(winsock_dll, "WSAGetLastError");
+	ws2->WSAStartup = (WSAStartup_FN)GetProcAddress(winsock_dll, "WSAStartup");
+	ws2->WSACleanup = (WSACLEANUP_FN)GetProcAddress(winsock_dll, "WSACleanup");
+	ws2->WSASend = (WSASend_FN)GetProcAddress(winsock_dll, "WSASend");
+	ws2->WSASocketA = (WSASocketA_FN)GetProcAddress(winsock_dll, "WSASocketA");
+	ws2->WSARecv = (WSARecv_FN)GetProcAddress(winsock_dll, "WSARecv");
+	ws2->WSAConnect = (WSAConnect_FN)GetProcAddress(winsock_dll, "WSAConnect");
+
 	ws2->Socket = (SOCKET_FN)GetProcAddress(winsock_dll, "socket");
 	ws2->Connect = (CONNECT_FN)GetProcAddress(winsock_dll, "connect");
 	ws2->Send = (SEND_FN)GetProcAddress(winsock_dll, "send");
 	ws2->Recv = (RECV_FN)GetProcAddress(winsock_dll, "recv");
 	ws2->CloseSocket = (CLOSESOCKET_FN)GetProcAddress(winsock_dll, "closesocket");
-	ws2->WSACleanup = (WSACLEANUP_FN)GetProcAddress(winsock_dll, "WSACleanup");
 	ws2->Bind = (BIND_FN)GetProcAddress(winsock_dll, "bind");
 	ws2->Listen = (LISTEN_FN)GetProcAddress(winsock_dll, "listen");
 	ws2->Accept = (ACCEPT_FN)GetProcAddress(winsock_dll, "accept");
 	ws2->Htons = (HTONS_FN)GetProcAddress(winsock_dll, "htons");
-	ws2->Inet_addr = (INET_ADDR_FN)GetProcAddress(winsock_dll, "inet_addr");
-	ws2->Inet_ntoa = (INET_NTOA_FN)GetProcAddress(winsock_dll, "inet_ntoa");
 	ws2->Inet_pton = (INET_PTON_FN)GetProcAddress(winsock_dll, "inet_pton");
 	ws2->ioctlsocket = (IOCTLSOCKET_FN)GetProcAddress(winsock_dll, "ioctlsocket");
 	ws2->setsockopt = (SETSOCKOPT_FN)GetProcAddress(winsock_dll, "setsockopt");
@@ -320,20 +321,22 @@ void unload_winsock_functions(winsock_functions_t* ws)
 
 		// 清空所有函数指针
 		ws->WSAGetLastError = NULL;
-
 		ws->WSAStartup = NULL;
+		ws->WSACleanup = NULL;
+		ws->WSAConnect = NULL;
+		ws->WSARecv = NULL;
+		ws->WSASend = NULL;
+		ws->WSASocketA = NULL;
+
 		ws->Socket = NULL;
 		ws->Connect = NULL;
 		ws->Send = NULL;
 		ws->Recv = NULL;
 		ws->CloseSocket = NULL;
-		ws->WSACleanup = NULL;
 		ws->Bind = NULL;
 		ws->Listen = NULL;
 		ws->Accept = NULL;
 		ws->Htons = NULL;
-		ws->Inet_addr = NULL;
-		ws->Inet_ntoa = NULL;
 		ws->Inet_pton = NULL;
 
 		ws->setsockopt = NULL;

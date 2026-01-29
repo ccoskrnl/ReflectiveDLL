@@ -160,22 +160,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="dll_headers.h" />
+    <ClInclude Include="file.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="headers.h" />
     <ClInclude Include="hwbp.h" />
     <ClInclude Include="misc.h" />
     <ClInclude Include="mylibc.h" />
+    <ClInclude Include="net.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="sleaping.h" />
     <ClInclude Include="swappala.h" />
     <ClInclude Include="syscalls.h" />
-    <ClInclude Include="test.h" />
+    <ClInclude Include="types.h" />
     <ClInclude Include="utils.h" />
-    <ClInclude Include="utils_headers.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="dll_loader.cpp" />
+    <ClCompile Include="file.cpp" />
     <ClCompile Include="mylibc.cpp" />
+    <ClCompile Include="net.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -184,7 +189,6 @@
     </ClCompile>
     <ClCompile Include="sleaping.cpp" />
     <ClCompile Include="utils.cpp" />
-    <ClCompile Include="utils_loader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

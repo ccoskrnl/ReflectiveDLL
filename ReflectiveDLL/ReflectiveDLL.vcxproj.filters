@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="头文件\utils">
+      <UniqueIdentifier>{3ca7cf27-1aa6-42de-86f8-706e0a11ae65}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\utils">
+      <UniqueIdentifier>{c7f5963a-b457-4366-bda1-6e5c359adc24}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -39,17 +45,23 @@
     <ClInclude Include="swappala.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="test.h">
+    <ClInclude Include="types.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="utils.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="utils_headers.h">
+    <ClInclude Include="dll_headers.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="mylibc.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="file.h">
+      <Filter>头文件\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="net.h">
+      <Filter>头文件\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="utils.h">
+      <Filter>头文件\utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -59,17 +71,23 @@
     <ClCompile Include="pch.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="utils.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="sleaping.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="utils_loader.cpp">
+    <ClCompile Include="dll_loader.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="mylibc.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="file.cpp">
+      <Filter>源文件\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="net.cpp">
+      <Filter>源文件\utils</Filter>
+    </ClCompile>
+    <ClCompile Include="utils.cpp">
+      <Filter>源文件\utils</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
