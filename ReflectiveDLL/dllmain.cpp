@@ -23,6 +23,11 @@ typedef struct _SAC_DLL_HEADER
 
 } SAC_DLL_HEADER, * PSAC_DLL_HEADER;
 
+/*
+	If the first instruction of the exported function is jmp, the function will parse the address of 
+	the jmp instruction and return the true address of the function. Otherwise, it will directly return 
+	the function address.
+*/
 uintptr_t resolve_jmp_to_actual_function(void* func_addr)
 {
 	if (!func_addr) return 0;
@@ -157,9 +162,9 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 		&& addr_NtMapViewOfSection != NULL
 		)
 	{
-		set_hwbp(DrIndex::DR1, addr_ZwClose, zw_func_s);
-		set_hwbp(DrIndex::DR2, addr_NtMapViewOfSection, zw_func_s);
 		set_hwbp(DrIndex::DR3, addr_NtCreateSection, zw_func_s);
+		set_hwbp(DrIndex::DR2, addr_NtMapViewOfSection, zw_func_s);
+		set_hwbp(DrIndex::DR1, addr_ZwClose, zw_func_s);
 	}
 
 	/* brute force reflective dll base address search */
@@ -741,7 +746,7 @@ static status_t custom_process_attach(HMODULE hModule)
 	
 	do
 	{
-		//MessageBoxA(NULL, "Ciallo～(∠ · ω< )⌒☆", "Ciallo～(∠ · ω< )⌒☆", MB_ICONERROR);
+		//MessageBoxA(NULL, "swappala", "swappala", MB_ICONERROR);
 		status = sleaping(&sleaping_para);
 		if (ST_FAILED(status))
 		{

@@ -1,7 +1,7 @@
 #pragma once
 #include "pch.h"
 
-#define SERVER_HOSTNAME "192.168.48.129"
+#define SERVER_HOSTNAME "192.168.48.1"
 //#define SERVER_HOSTNAME "127.0.0.1"
 #define SERVER_PORT 17888
 #define INTERVAL_SECONDS 21

@@ -8,7 +8,7 @@
 
 ## 演示
 
-
+下面是通过创建进程`cmd.exe /k chcp 65001 >nul` 实现远控的截图。
 
 ![demo](./tmp/demo.png)
 
@@ -235,6 +235,13 @@ bool load_winsock_functions(winsock_functions_t* ws_funcs)
 }
 
 ```
+
+
+
+## TODO
+
+-   [ ] 使用<small>OBF</small>AG<small>swap</small> 自修改状态机算法对注入器进行动态混淆
+-   [ ] 为反射DLL添加更多扩展功能
 
 
 
