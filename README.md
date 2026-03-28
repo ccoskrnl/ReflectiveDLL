@@ -10,7 +10,7 @@
 
 下面是通过创建进程`cmd.exe /k chcp 65001 >nul` 实现远控的截图。
 
-![demo](./tmp/demo.png)
+![demo](./demo/win_cmd.png)
 
 
 
