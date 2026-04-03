@@ -91,7 +91,7 @@ private:
         else
         {
 			std::cout << "[+] Looking for process: " << arguments.process << std::endl;
-			target_pid = ret_pid_by_name(get_wc(arguments.process));
+			target_pid = ret_pid_by_proc_name(get_wc(arguments.process));
 
 			if (target_pid == 0) {
 				std::cerr << "[-] Process not found\n";

