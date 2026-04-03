@@ -127,6 +127,7 @@
     <ClCompile Include="CppInjector.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="args.h" />
     <ClInclude Include="pe_parser.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

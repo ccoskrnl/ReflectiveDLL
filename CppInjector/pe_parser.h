@@ -86,7 +86,7 @@ public:
 		return true;
 	}
 
-	DWORD rva2raw(DWORD rva) {
+	uintptr_t rva2raw(uintptr_t rva) {
 
 		for (int i = 0; i < file_header.NumberOfSections; i++) {
 			// sections might have different offset, so we need to find the one where our RVA is falling into
