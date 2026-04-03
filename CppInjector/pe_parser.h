@@ -130,6 +130,12 @@ public:
 		return resolve_jmp_to_actual_function(func_raw);
 	}
 
+
+	/*
+		If the first instruction of the exported function is jmp, the function will parse the address of 
+		the jmp instruction and return the true address of the function. Otherwise, it will directly return 
+		the function address.
+	*/
 	uintptr_t resolve_jmp_to_actual_function(uintptr_t func_addr)
 	{
 		if (!func_addr) return 0;

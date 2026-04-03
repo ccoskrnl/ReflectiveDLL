@@ -248,12 +248,10 @@ int main(int ac, char* av[], char* env[])
         if (!VirtualProtect((VOID*)dll_ptr, dll_bytes.size(), PAGE_EXECUTE_READ, &oldprotect))
             return -1;
 
-        uintptr_t rf_raw = pe.get_func_raw("ReflectiveFunction");
-
         DWORD thread_id = 0;
         HANDLE thread = 0;
 
-        thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)(pe.get_base() + rf_raw), 0, CREATE_SUSPENDED, &thread_id);
+        thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)(dll_ptr + func_raw), 0, CREATE_SUSPENDED, &thread_id);
         if (thread == 0)
             return -1;
         ResumeThread(thread);
