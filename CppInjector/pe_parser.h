@@ -76,15 +76,12 @@ public:
 
 		}
 
-		p_export_dict = (PIMAGE_EXPORT_DIRECTORY)(base + rva2raw(
-			optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress,
-			(int)file_header.NumberOfSections
-		));
+		p_export_dict = (PIMAGE_EXPORT_DIRECTORY)(base + rva2raw(optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress));
 
 
-		func_name_array = (DWORD*)(base + rva2raw(p_export_dict->AddressOfNames, (int)file_header.NumberOfSections));
-		func_addr_array = (DWORD*)(base + rva2raw(p_export_dict->AddressOfFunctions, (int)file_header.NumberOfSections));
-		func_ordinal_array = (WORD*)(base + rva2raw(p_export_dict->AddressOfNameOrdinals, (int)file_header.NumberOfSections));
+		func_name_array = (DWORD*)(base + rva2raw(p_export_dict->AddressOfNames));
+		func_addr_array = (DWORD*)(base + rva2raw(p_export_dict->AddressOfFunctions));
+		func_ordinal_array = (WORD*)(base + rva2raw(p_export_dict->AddressOfNameOrdinals));
 
 		return true;
 	}
@@ -124,7 +121,12 @@ public:
 
 	uintptr_t get_func_raw(const char* func_name)
 	{
-		uintptr_t func_raw = rva2raw((DWORD)get_func_rva(func_name));
+		uintptr_t func_raw = 0;
+		uintptr_t func_rva = 0;
+		func_rva = get_func_rva(func_name);
+		if (func_rva == 0)
+			return 0;
+		func_raw = rva2raw(func_rva);
 		return resolve_jmp_to_actual_function(func_raw);
 	}
 
@@ -181,7 +183,7 @@ public:
 			}
 
 		}
-		if (func_end_rva == 0);
+		if (func_end_rva == 0)
 			return 0;
 
 		return (DWORD)(func_end_rva - func_rva);

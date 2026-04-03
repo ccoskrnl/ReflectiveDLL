@@ -14,6 +14,9 @@
 #define _in_ 
 #define _out_
 
+#pragma comment(lib, "urlmon.lib")
+#pragma comment(lib, "wininet.lib")
+
 std::vector<char> download_from_url(_in_ const char* url)
 {
     std::vector<char> buffer;
@@ -204,11 +207,14 @@ int main(int ac, char* av[], char* env[])
     int local = 1;
 
 	// 搜索进程
-    wchar_t* proc_name = get_wc(av[2]);
-    int pid = ret_pid_by_proc_name(proc_name);
-    delete[] proc_name;
-    if (pid == 0)
-        return -1;
+    if (local == 0)
+    {
+		wchar_t* proc_name = get_wc(av[2]);
+		int pid = ret_pid_by_proc_name(proc_name);
+		delete[] proc_name;
+		if (pid == 0)
+			return -1;
+    }
 
 	// 下载DLL
     std::vector dll_bytes = load_local_file(av[1]);
@@ -219,8 +225,12 @@ int main(int ac, char* av[], char* env[])
     pe_parser pe;
     pe.initialize(dll_bytes.data(), dll_bytes.size());
 	// Find YOLO
-    DWORD func_size = pe.get_func_size("yolo");
     uintptr_t func_raw = pe.get_func_raw("yolo");
+    if (func_raw == 0)
+        return -1;
+    DWORD func_size = pe.get_func_size("yolo");
+    if (func_size == 0)
+        return -1;
 
 	// VirtualAllocEX
 	// WriteMemory
@@ -244,9 +254,11 @@ int main(int ac, char* av[], char* env[])
         HANDLE thread = 0;
 
         thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)(pe.get_base() + rf_raw), 0, CREATE_SUSPENDED, &thread_id);
+        if (thread == 0)
+            return -1;
         ResumeThread(thread);
         WaitForSingleObject(thread, INFINITE);
-        getchar();
+        char pause = getchar();
         return 0;
     }
 
