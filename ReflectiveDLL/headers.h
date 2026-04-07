@@ -915,6 +915,95 @@ typedef NTSTATUS(NTAPI* NtAlertResumeThreadFunc)(
     _Out_opt_ PULONG PreviousSuspendCount
     );
 
+
+typedef 
+NTSYSCALLAPI
+NTSTATUS
+(NTAPI* NtMapViewOfSectionFunc)(
+    _In_ HANDLE SectionHandle,
+    _In_ HANDLE ProcessHandle,
+    _Inout_ _At_(*BaseAddress, _Readable_bytes_(*ViewSize) _Writable_bytes_(*ViewSize) _Post_readable_byte_size_(*ViewSize)) PVOID* BaseAddress,
+    _In_ ULONG_PTR ZeroBits,
+    _In_ SIZE_T CommitSize,
+    _Inout_opt_ PLARGE_INTEGER SectionOffset,
+    _Inout_ PSIZE_T ViewSize,
+    _In_ SECTION_INHERIT InheritDisposition,
+    _In_ ULONG AllocationType,
+    _In_ ULONG PageProtection
+);
+
+
+typedef const OBJECT_ATTRIBUTES* PCOBJECT_ATTRIBUTES;
+
+
+/**
+ * The CLIENT_ID structure contains identifiers of a process and a thread.
+ *
+ * \sa https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tsts/a11e7129-685b-4535-8d37-21d4596ac057
+ */
+typedef CLIENT_ID PCLIENT_ID;
+
+
+/**
+ * Opens an existing process object.
+ *
+ * \param ProcessHandle A pointer to a handle that receives the process object handle.
+ * \param DesiredAccess The access rights desired for the process object.
+ * \param ObjectAttributes A pointer to an OBJECT_ATTRIBUTES structure that specifies the attributes of the new process.
+ * \param ClientId Optional. A pointer to a CLIENT_ID structure that specifies the client ID of the process to be opened.
+ * \return NTSTATUS Successful or errant status.
+ * \sa https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/nf-ntddk-ntopenprocess
+ */
+typedef 
+NTSYSCALLAPI
+NTSTATUS
+(NTAPI* NtOpenProcessFunc)(
+    _Out_ PHANDLE ProcessHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ PCOBJECT_ATTRIBUTES ObjectAttributes,
+    _In_opt_ PCLIENT_ID ClientId
+);
+
+typedef 
+NTSYSCALLAPI
+NTSTATUS
+(NTAPI* NtAllocateVirtualMemoryFunc)(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ _At_(*BaseAddress, _Readable_bytes_(*RegionSize) _Writable_bytes_(*RegionSize) _Post_readable_byte_size_(*RegionSize)) PVOID* BaseAddress,
+    _In_ ULONG_PTR ZeroBits,
+    _Inout_ PSIZE_T RegionSize,
+    _In_ ULONG AllocationType,
+    _In_ ULONG PageProtection
+);
+
+typedef
+NTSYSCALLAPI
+NTSTATUS
+(NTAPI* NtWriteVirtualMemoryFunc)(
+    _In_ HANDLE ProcessHandle,
+    _In_opt_ PVOID BaseAddress,
+    _In_reads_bytes_(NumberOfBytesToWrite) PVOID Buffer,
+    _In_ SIZE_T NumberOfBytesToWrite,
+    _Out_opt_ PSIZE_T NumberOfBytesWritten
+);
+
+
+
+
+typedef
+NTSYSCALLAPI
+NTSTATUS
+(NTAPI *NtProtectVirtualMemoryFunc)(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PVOID* BaseAddress,
+    _Inout_ PSIZE_T RegionSize,
+    _In_ ULONG NewProtection,
+    _Out_ PULONG OldProtection
+);
+
+
+
+
 typedef UINT(CALLBACK* fnMessageBoxA)(
     HWND   hWnd,
     LPCSTR lpText,
@@ -1056,8 +1145,18 @@ typedef struct _NT_FUNCTIONS
     NtQueryObjectFunc NtQueryObject;
     NtQueryInformationWorkerFactoryFunc NtQueryInformationWorkerFactory;
     NtTestAlertFunc NtTestAlert;
+    NtOpenProcessFunc NtOpenProcess;
+    NtAllocateVirtualMemoryFunc NtAllocateVirtualMemory;
+    NtWriteVirtualMemoryFunc NtWriteVirtualMemory;
+    NtProtectVirtualMemoryFunc NtProtectVirtualMemory;
 
 } nt_functions_t, * PNT_FUNCTIONS;
 
 
 
+/*---------FUNCTIONS PROTOTYPES--------------*/
+FARPROC GPARO(IN HMODULE hModule, IN int ordinal);
+
+FARPROC GPAR(IN HMODULE hModule, IN CHAR lpApiName[]);
+
+HMODULE GMHR(IN WCHAR szModuleName[]);

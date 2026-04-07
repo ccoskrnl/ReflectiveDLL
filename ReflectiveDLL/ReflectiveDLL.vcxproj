@@ -179,6 +179,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="dll_loader.cpp" />
     <ClCompile Include="file.cpp" />
+    <ClCompile Include="injector.cpp" />
     <ClCompile Include="mylibc.cpp" />
     <ClCompile Include="net.cpp" />
     <ClCompile Include="pch.cpp">

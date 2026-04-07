@@ -89,6 +89,9 @@
     <ClCompile Include="utils.cpp">
       <Filter>源文件\utils</Filter>
     </ClCompile>
+    <ClCompile Include="injector.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
