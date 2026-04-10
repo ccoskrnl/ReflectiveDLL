@@ -5,13 +5,10 @@
 #include "sleaping.h"
 
 
-BOOLEAN SafeWriteStackParameter(HANDLE hProcess, ULONG_PTR target_addr, ULONG_PTR value) {
+BOOLEAN AllocateStack(HANDLE hProcess, ULONG_PTR target_addr) {
     MEMORY_BASIC_INFORMATION mbi;
     int status = 0;
 
-
-    if (target_addr == 0)
-        return FALSE;
 
     target_addr &= ~((UINT64)0xfff);
 
@@ -26,11 +23,11 @@ BOOLEAN SafeWriteStackParameter(HANDLE hProcess, ULONG_PTR target_addr, ULONG_PT
 
         // 尝试提交该内存页。对于栈预留空间，VirtualAlloc 会将其转为 MEM_COMMIT
         // 如果该地址完全非法（不在栈预留范围内），此操作会失败
-        if (!VirtualAllocEx(hProcess, (LPVOID)target_addr, sizeof(ULONG_PTR) << 1, MEM_COMMIT, PAGE_READWRITE)) {
+        if (!VirtualAllocEx(hProcess, (LPVOID)target_addr, 0x1000, MEM_COMMIT, PAGE_READWRITE)) {
 
             // 如果 VirtualAlloc 失败，尝试最后的手段：修改保护属性
             DWORD oldProtect;
-            if (!VirtualProtectEx(hProcess, (LPVOID)target_addr, sizeof(ULONG_PTR) << 1, PAGE_READWRITE, &oldProtect)) {
+            if (!VirtualProtectEx(hProcess, (LPVOID)target_addr, 0x1000, PAGE_READWRITE, &oldProtect)) {
                 return FALSE; // 彻底无法写入
             }
         }
@@ -204,16 +201,22 @@ status_t sleaping(sleaping_para_t* para)
 
     // the offset must be the either hex 28 or int 40
     // (5th argument, 6th argument
-    // 此时，context_3->Rsp 的值可能正好就在内存页的边缘（例如 0x3C2E8FFFF8）。
-    // 加上 40 字节时，计算出的地址变成了 0x0000003C2E900000。
-    // 这个地址 ...900000 可能尚未分配，或者是一个不可写的保护页（Guard Page）。
-    // 由于代码强行进行写入操作，CPU 触发了 EXCEPTION_ACCESS_VIOLATION。
 
-    if (SafeWriteStackParameter(((HANDLE)(LONG_PTR)-1), context_1->Rsp + 40, 0x0) == FALSE)
-    {
-        status = ST_ERROR;
-        goto __clean_up_context;
-    }
+
+    /*
+	  跨页监测
+      此时，context_3->Rsp 的值可能正好就在内存页的边缘（例如 0x3C2E8FFFF8）。
+      加上 40 字节时，计算出的地址变成了 0x0000003C2E900000。
+      这个地址 ...900000 可能尚未分配，或者是一个不可写的保护页（Guard Page）。
+      由于代码强行进行写入操作，CPU 触发了 EXCEPTION_ACCESS_VIOLATION。
+    */
+    if (((context_1->Rsp + 40) >> 0xC ) > (context_1->Rsp >> 0xC) || ((context_1->Rsp + 48) >> 0xC ) > (context_1->Rsp >> 0xC))
+		if (AllocateStack(((HANDLE)(LONG_PTR)-1), context_1->Rsp + 40) == FALSE)
+		{
+			status = ST_ERROR;
+			goto __clean_up_context;
+		}
+
     
     *(ULONG_PTR*)((*context_1).Rsp + 40) = 0x0;
     *(ULONG_PTR*)((*context_1).Rsp + 48) = (ULONG_PTR)image_base;
@@ -228,11 +231,13 @@ status_t sleaping(sleaping_para_t* para)
     (*context_3).R9 = (DWORD64)0x00;
 
 
-    if (SafeWriteStackParameter(((HANDLE)(LONG_PTR)-1), context_3->Rsp + 40, 0x0) == FALSE)
-    {
-        status = ST_ERROR;
-        goto __clean_up_context;
-    }
+    if (((context_3->Rsp + 40) >> 0xC ) > (context_3->Rsp >> 0xC) || ((context_3->Rsp + 48) >> 0xC ) > (context_3->Rsp >> 0xC))
+		if (AllocateStack(((HANDLE)(LONG_PTR)-1), context_3->Rsp + 40) == FALSE)
+		{
+			status = ST_ERROR;
+			goto __clean_up_context;
+		}
+
     // the offset must be the either hex 28 or int 40
     *(ULONG_PTR*)((*context_3).Rsp + 40) = 0x0;
     *(ULONG_PTR*)((*context_3).Rsp + 48) = (ULONG_PTR)image_base;

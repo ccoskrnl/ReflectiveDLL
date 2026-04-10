@@ -34,8 +34,6 @@ static LPVOID ntdll_unhooking(NtProtectVirtualMemoryFunc ProtectVirtualMemory)
 	return ptr;
 }
 
-
-
 bool load_nt_functions(PNT_FUNCTIONS nt)
 {
 	CHAR str_NtProtectVirtualMemory[] = { 'N', 't', 'P', 'r', 'o', 't', 'e', 'c', 't', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
@@ -108,6 +106,50 @@ bool load_nt_functions(PNT_FUNCTIONS nt)
 
 	return true;
 
+}
+
+
+bool load_ole32_functions(ole32_functions_t* ole32)
+{
+	if (ole32 == NULL)
+		return false;
+
+	ole32->ole32 = LoadLibraryA("ole32.dll");
+	if (ole32->ole32 == NULL)
+		return false;
+
+	ole32->CoCreateInstance = (CoCreateInstanceFunc)GetProcAddress(ole32->ole32, "CoCreateInstance");
+	ole32->CoInitializeEx = (CoInitializeExFunc)GetProcAddress(ole32->ole32, "CoInitializeEx");
+	ole32->CoUninitialize = (CoUninitializeFunc)GetProcAddress(ole32->ole32, "CoUninitialize");
+	uint64_t* funcs_start = (uint64_t*)ole32;
+	int num = sizeof(*ole32) / sizeof(void*);
+	for (int i = 0; i < num; i++, funcs_start++)
+	{
+		if (*funcs_start == NULL)
+		{
+			unload_ole32_functions(ole32);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void unload_ole32_functions(ole32_functions_t* ole32)
+{
+	if (ole32 != NULL)
+	{
+		if (ole32->ole32 != NULL)
+		{
+			FreeLibrary(ole32->ole32);
+			ole32->ole32 = NULL;
+		}
+
+		// 清空所有函数指针
+		ole32->CoCreateInstance = NULL;
+		ole32->CoInitializeEx = NULL;
+		ole32->CoUninitialize = NULL;
+	}
 }
 
 

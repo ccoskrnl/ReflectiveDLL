@@ -4,6 +4,7 @@
 #include "framework.h"
 #include "headers.h"
 #include <winternl.h>
+#include <Unknwn.h>
 
 typedef HDC(WINAPI* CREATECOMPATIBLEDC_FN)(HDC hDC);
 typedef BOOL(WINAPI* DELETEDC_FN)(HDC hDC);
@@ -223,6 +224,30 @@ typedef struct _kernel32_functions
 } kernel32_functions_t;
 
 
+typedef
+HRESULT (*CoCreateInstanceFunc)(
+	REFCLSID  rclsid,
+	LPUNKNOWN pUnkOuter,
+	DWORD     dwClsContext,
+	REFIID    riid,
+	LPVOID* ppv
+);
+
+typedef
+HRESULT (*CoInitializeExFunc)(
+	LPVOID pvReserved,
+	DWORD  dwCoInit
+);
+
+typedef void (*CoUninitializeFunc)();
+
+typedef struct _ole32_functions {
+	HMODULE ole32;
+	CoCreateInstanceFunc	CoCreateInstance;
+	CoInitializeExFunc		CoInitializeEx;
+	CoUninitializeFunc		CoUninitialize;
+}ole32_functions_t;
+
 typedef struct _global_functions
 {
 	kernel32_functions_t kernel32;
@@ -245,3 +270,6 @@ void unload_user32_functions(user32_functions_t* user_funcs);
 
 bool load_kernel32_functions(kernel32_functions_t* kernel_funcs);
 void unload_kernel32_functions(kernel32_functions_t* kernel_funcs);
+
+bool load_ole32_functions(ole32_functions_t* ole32);
+void unload_ole32_functions(ole32_functions_t* ole32);
