@@ -18,6 +18,9 @@
     <ClCompile Include="CppInjector.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="nt_api.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pe_parser.h">
@@ -26,5 +29,13 @@
     <ClInclude Include="args.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="ntapi.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="indirect_syscall.asm">
+      <Filter>源文件</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

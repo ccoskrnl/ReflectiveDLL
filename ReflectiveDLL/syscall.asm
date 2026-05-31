@@ -1,9 +1,19 @@
-; bello code for syscall 
+PUBLIC ZwAllocateVirtualMemory
+PUBLIC ZwProtectVirtualMemory
+PUBLIC ZwFlushInstructionCache
+PUBLIC ZwCreateSection
+PUBLIC ZwMapViewOfSection
+PUBLIC ZwUnmapViewOfSection
+PUBLIC ZwQuerySystemInformation
+PUBLIC ZwQueryObject
+PUBLIC ZwQueryVirtualMemory
+PUBLIC ZwFreeVirtualMemory
+PUBLIC ZwSetContextThread
+PUBLIC ZwGetContextThread
+PUBLIC NtOpenProcessToken
+PUBLIC NtAdjustPrivilegesToken
 
-.data
-; i do not think data is needer here
-
-.code 
+.code _text
 ZwAllocateVirtualMemory PROC
 	mov r10, rcx
 	mov eax, dword ptr [rsp + 56]
@@ -76,4 +86,17 @@ ZwGetContextThread PROC
 	jmp r9
 ZwGetContextThread ENDP
 
-end
+NtOpenProcessToken PROC PUBLIC
+	mov r10, rcx
+	mov eax, r9d
+	jmp qword ptr [rsp + 40]
+NtOpenProcessToken ENDP
+
+
+NtAdjustPrivilegesToken PROC PUBLIC
+	mov r10, rcx
+	mov eax, dword ptr [rsp + 56]
+	jmp qword ptr [rsp + 64]
+NtAdjustPrivilegesToken ENDP
+
+END

@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <urlmon.h>
 #include <wininet.h>
+#include <winternl.h>
 #include <TlHelp32.h>
 
 #include <iostream>
@@ -10,11 +11,13 @@
 #include <filesystem>
 
 #include "pe_parser.h"
+#include "ntapi.h"
 #include "args.h"
 
 #define _in_ 
 #define _out_
 
+#pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "urlmon.lib")
 #pragma comment(lib, "wininet.lib")
 
@@ -200,13 +203,62 @@ int ret_pid_by_proc_name(wchar_t* proc_name)
 
 
 
+static bool enable_debug_privilege(ntapi_syscall_ssn_t* syscall_ssn)
+{
+	HANDLE hToken;
+	TOKEN_PRIVILEGES tkp;
+    NTSTATUS status = 0;
+    
+    status = Syscall_NtOpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken, syscall_ssn[NtOpenProcessTokenIndex].ssn, syscall_ssn[NtOpenProcessTokenIndex].addr);
+    if (status != 0)
+    {
+        return false;
+    }
 
+	status = LookupPrivilegeValue(NULL, SE_DEBUG_NAME, (PLUID)&tkp.Privileges[0].Luid);
+    if (status == 0)
+    {
+        return false;
+    }
+
+	tkp.PrivilegeCount = 1;
+	tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+
+	status = Syscall_NtAdjustPrivilegesToken(hToken, FALSE, &tkp, sizeof(tkp), NULL, NULL, syscall_ssn[NtAdjustPrivilegesTokenIndex].ssn, syscall_ssn[NtAdjustPrivilegesTokenIndex].addr);
+    if (status != 0)
+    {
+        return false;
+    }
+
+	CloseHandle(hToken);
+	return true;
+}
 
 
 int main(int ac, char* av[], char* env[])
 {
     args_parser args(ac, av);
     std::vector<char> dll_bytes;
+
+	ntapi_syscall_ssn_t syscall_ssn[NT_API_SYSCALL_COUNT] = { 0 };
+	HMODULE hm_ntdll = GetModuleHandleA("ntdll.dll");
+
+    nt_api_init(hm_ntdll, syscall_ssn);
+
+    bool debug_privilege = enable_debug_privilege(syscall_ssn);
+    if (debug_privilege)
+    {
+		std::cout << "[+] Debug privilege enabled." << std::endl;
+    
+	}
+    else
+    {
+        std::cout << "[-] Failed to enable debug privilege." << std::endl;
+    }
+
+    getchar();
+
+    return 0;
 
     // 目标进程PID
     int target_pid = 0;
