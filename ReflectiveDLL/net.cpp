@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "net.h"
-#include "mylibc.h"
+#include "misc.h"
 
 #include "types.h"
 
@@ -134,7 +134,7 @@ status_t send_file(SOCKET socket, const char* filepath, winsock_functions_t* ws2
 		return ST_ERROR;
 	}
 	file_size.QuadPart = file_size_low;
-	UINT64 size_be = my_byteswap_uint64(file_size.QuadPart);
+	UINT64 size_be = custom_byteswap_uint64(file_size.QuadPart);
 	DWORD size_data_sent = 0;
 
 	if (send_data(socket, (char*)&size_be, sizeof(UINT64), &size_data_sent, ws2) != 0)
@@ -144,7 +144,7 @@ status_t send_file(SOCKET socket, const char* filepath, winsock_functions_t* ws2
 	}
 
 
-	buffer = (BYTE*)my_malloc(BUFFER_SIZE);
+	buffer = (BYTE*)custom_malloc(BUFFER_SIZE);
 	if (buffer == NULL)
 	{
 		CloseHandle(hFile);
@@ -220,7 +220,7 @@ cleanup:
 
 	if (buffer)
 	{
-		my_free(buffer);
+		custom_free(buffer);
 	}
 
 	if (hFile != INVALID_HANDLE_VALUE)

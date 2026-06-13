@@ -6,8 +6,7 @@
 #include "net.h"
 #include "dll_headers.h"
 #include "headers.h"
-#include "mylibc.h"
-#include "sleaping.h"
+#include "misc.h"
 
 int capture_screenshot_win32(const char* filename, gdi32_functions_t* gdi32)
 {

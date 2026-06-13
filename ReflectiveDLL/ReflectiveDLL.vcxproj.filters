@@ -51,9 +51,6 @@
     <ClInclude Include="dll_headers.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="mylibc.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="file.h">
       <Filter>头文件\utils</Filter>
     </ClInclude>
@@ -62,6 +59,12 @@
     </ClInclude>
     <ClInclude Include="utils.h">
       <Filter>头文件\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="rfdll.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ldr.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -77,9 +80,6 @@
     <ClCompile Include="dll_loader.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="mylibc.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="file.cpp">
       <Filter>源文件\utils</Filter>
     </ClCompile>
@@ -90,6 +90,15 @@
       <Filter>源文件\utils</Filter>
     </ClCompile>
     <ClCompile Include="injector.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="syscall_stub.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="misc.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ldr.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

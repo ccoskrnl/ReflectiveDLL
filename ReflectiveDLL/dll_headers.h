@@ -6,6 +6,7 @@
 #include <winternl.h>
 #include <Unknwn.h>
 
+
 typedef HDC(WINAPI* CREATECOMPATIBLEDC_FN)(HDC hDC);
 typedef BOOL(WINAPI* DELETEDC_FN)(HDC hDC);
 typedef HBITMAP(WINAPI* CREATECOMPATIBLEBITMAP_FN)(HDC hDC, int cx, int cy);

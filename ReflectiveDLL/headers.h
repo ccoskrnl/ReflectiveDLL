@@ -12,25 +12,6 @@
 #define STATUS_SUCCESS                   ((NTSTATUS)0x00000000L)    // ntsubauth
 
 
-
-typedef struct _FUNCTION_ADDRESSES {
-    PVOID NtWaitForSingleObjectAddress;
-    PVOID NtTestAlertAddress;
-    PVOID MessageBoxAddress;
-    PVOID ResumeThreadAddress;
-} FUNCTION_ADDRESSES, * PFUNCTION_ADDRESSES;
-
-typedef struct _CORE_ARGUMENTS {
-
-    PBYTE myBase;
-    HANDLE sacDLLHandle;
-    HANDLE malDLLHandle;
-    SIZE_T viewSize;
-
-} CORE_ARGUMENTS, * PCORE_ARGUMENTS;
-
-
-
 typedef struct _OBJECT_TYPE_INFORMATION {
     UNICODE_STRING Name;
     ULONG TotalNumberOfObjects;
@@ -555,21 +536,6 @@ typedef struct _PEBC_LDR_DATA {
     LIST_ENTRY              InInitializationOrderModuleList;
 } PEBC_LDR_DATA, * PPEBC_LDR_DATA;
 
-typedef struct _DLL_HEADER {
-    DWORD header; //4 bytes header
-    DWORD key; //4 bytes encryption key
-    SIZE_T funcSize; //8 bytes
-
-} DLL_HEADER, * PDLL_HEADER;
-
-typedef struct _SYSCALL_ENTRY {
-
-    FARPROC funcAddr;
-    PBYTE sysretAddr;
-    int SSN;
-
-} SYSCALL_ENTRY, * PSYSCALL_ENTRY;
-
 // https://www.nirsoft.net/kernel_struct/vista/LDR_DATA_TABLE_ENTRY.html
 
 typedef struct _LDR_DATA_TABLE_ENTRYC {
@@ -814,24 +780,6 @@ typedef enum _MEMORY_INFORMATION_CLASS
     MemorySharedCommitInformation // MEMORY_SHARED_COMMIT_INFORMATION
 } MEMORY_INFORMATION_CLASS;
 
-typedef enum _INDIRECT_SYSCALL_FUNC
-{
-    ZwAllocateVirtualMemoryF,
-    ZwProtectVirtualMemoryF,
-    ZwFlushInstructionCacheF,
-    ZwCreateSectionF,
-    ZwMapViewOfSectionF,
-    ZwUnmapViewOfSectionF,
-    ZwQuerySystemInformationF,
-    ZwQueryObjectF,
-    ZwQueryVirtualMemoryF,
-    ZwFreeVirtualMemoryF,
-    ZwSetContextThreadF,
-    ZwGetContextThreadF,
-    AmountofSyscalls
-
-} INDIRECT_SYSCALL_FUNC;
-
 typedef struct _VM_INFORMATION
 {
     DWORD                    dwNumberOfOffsets;
@@ -985,6 +933,28 @@ NTSTATUS
     _In_reads_bytes_(NumberOfBytesToWrite) PVOID Buffer,
     _In_ SIZE_T NumberOfBytesToWrite,
     _Out_opt_ PSIZE_T NumberOfBytesWritten
+);
+
+
+/**
+* The NtReadVirtualMemory routine reads virtual memory from a process.
+*
+* \param ProcessHandle A handle to the process whose memory is to be read.
+* \param BaseAddress A pointer to the base address in the specified process from which to read.
+* \param Buffer A pointer to a buffer that receives the contents from the address space of the specified process.
+* \param NumberOfBytesToRead The number of bytes to be read from the specified process.
+* \param NumberOfBytesRead A pointer to a variable that receives the number of bytes transferred into the specified buffer.
+* \return NTSTATUS Successful or errant status.
+*/
+typedef
+NTSYSCALLAPI
+NTSTATUS
+(*NTAPI NtReadVirtualMemoryFunc)(
+    _In_ HANDLE ProcessHandle,
+    _In_opt_ PVOID BaseAddress,
+    _Out_writes_bytes_to_(NumberOfBytesToRead, *NumberOfBytesRead) PVOID Buffer,
+    _In_ SIZE_T NumberOfBytesToRead,
+    _Out_opt_ PSIZE_T NumberOfBytesRead
 );
 
 
