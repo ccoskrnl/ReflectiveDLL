@@ -30,4 +30,13 @@ typedef struct _CORE_ARGUMENTS {
 } CORE_ARGUMENTS, * PCORE_ARGUMENTS;
 
 
+typedef struct _SAC_DLL_HEADER
+{
+    HANDLE sac_dll_handle;
+    HANDLE mal_dll_handle;
+    SIZE_T payload_size;
+    PBYTE to_free;
+
+} SAC_DLL_HEADER, * PSAC_DLL_HEADER;
+
 

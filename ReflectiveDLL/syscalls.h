@@ -243,3 +243,5 @@ EXTERN_C NTSTATUS ZwAdjustPrivilegesToken(
 
 
 bool retrieve_zw_func_s(IN HMODULE hm, IN PSYSCALL_ENTRY syscalls);
+
+extern SYSCALL_ENTRY g_zw_functions[AmountofSyscalls];

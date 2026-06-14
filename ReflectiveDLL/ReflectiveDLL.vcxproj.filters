@@ -66,6 +66,9 @@
     <ClInclude Include="ldr.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="reconnaissance.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -99,6 +102,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="ldr.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="reconnaissance.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
