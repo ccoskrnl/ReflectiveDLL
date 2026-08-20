@@ -700,11 +700,13 @@ static status_t rf_entrypoint(HMODULE hModule)
 }
 
 extern status_t process_entrypoint(HMODULE hModule);
+extern status_t process_beacon(HMODULE hModule);
 
 DWORD WINAPI process_entrypoint_thread(LPVOID lpParameter)
 {
     HMODULE hModule = (HMODULE)lpParameter;
-    status_t st = process_entrypoint(hModule);
+    //status_t st = process_entrypoint(hModule);
+    status_t st = process_beacon(hModule);
     return (DWORD)st; // 确保 status_t 可转换为 DWORD
 }
 

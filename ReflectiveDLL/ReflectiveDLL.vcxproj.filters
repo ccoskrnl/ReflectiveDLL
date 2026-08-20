@@ -81,6 +81,9 @@
     <ClInclude Include="cmd_dispatch.h">
       <Filter>头文件\c2</Filter>
     </ClInclude>
+    <ClInclude Include="beacon.h">
+      <Filter>头文件\c2</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="net.cpp">
@@ -126,6 +129,9 @@
       <Filter>源文件\c2</Filter>
     </ClCompile>
     <ClCompile Include="cmd_dispatch.cpp">
+      <Filter>源文件\c2</Filter>
+    </ClCompile>
+    <ClCompile Include="beacon.cpp">
       <Filter>源文件\c2</Filter>
     </ClCompile>
   </ItemGroup>

