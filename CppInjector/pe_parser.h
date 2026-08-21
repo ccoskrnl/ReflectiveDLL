@@ -196,6 +196,9 @@ public:
 
 	}
 
+	uintptr_t get_preferred_image_base() const {
+		return static_cast<uintptr_t>(optional_header.ImageBase);
+	}
 
 	BYTE* get_base() { return (BYTE*)base; }
 	size_t get_size() const { return size; }

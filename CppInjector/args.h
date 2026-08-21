@@ -18,7 +18,7 @@ public:
 	char* url = 0;
 	char* process = 0;
 	int is_local = 1;
-	
+
 	args_parser(int argc, char* argv[])
 	{
 

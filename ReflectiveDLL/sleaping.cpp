@@ -79,7 +79,7 @@ Main thread
     |
     +-- Wait for all threads to complete
 */
-status_t sleaping(sleaping_para_t* para)
+status_t sleaping(DWORD64 milliseconds, sleaping_para_t* para)
 {
 
     PVOID image_base = para->image_base;
@@ -146,7 +146,7 @@ status_t sleaping(sleaping_para_t* para)
     *(ULONG_PTR*)((*context_2).Rsp) = (DWORD64)nt_func_s->NtTestAlert;
     (*context_2).Rip = (DWORD64)WaitForSingleObjectEx;
     (*context_2).Rcx = (DWORD64)(dummy_event);
-    (*context_2).Rdx = (DWORD64)21000;         // 21 second timeout
+    (*context_2).Rdx = (DWORD64)milliseconds;         // timeout
     (*context_2).R8 = FALSE;
 
 
