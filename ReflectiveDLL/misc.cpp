@@ -2,6 +2,29 @@
 #include "framework.h"
 #include "headers.h"
 #include <stdint.h>
+DWORD HashStringW(const wchar_t* str)
+{
+    DWORD hash = 5381; // DJB2 初始值
+    while (*str)
+    {
+        // 仅使用低字节（模块名通常为 ASCII）
+        hash = ((hash << 5) + hash) + (unsigned char)(*str & 0xFF);
+        str++;
+    }
+    return hash;
+}
+DWORD HashStringA(const char* str)
+{
+    DWORD hash = 5381;
+    while (*str)
+    {
+        hash = ((hash << 5) + hash) + (unsigned char)(*str);
+        str++;
+    }
+    return hash;
+}
+
+
 
 // =========================================================================
 // custom_strlen - returns the length of a null-terminated string
@@ -286,7 +309,7 @@ int str_icmp(const char* str1, const char* str2) {
     return (*str1 == '\0' && *str2 == '\0') ? 1 : 0;
 }
 
-bool CompareNStringASCII(CHAR str1[], CHAR str2[], int n) {
+BOOL CompareNStringASCII(CHAR str1[], CHAR str2[], int n) {
 
 
     int i = 0;
@@ -323,7 +346,7 @@ void ConvertDWORDToString(DWORD value, char* buffer, size_t bufferSize) {
     buffer[11] = '\0';
 }
 
-bool ComprareNStringWIDE(WCHAR str1[], WCHAR str2[], int n) {
+BOOL ComprareNStringWIDE(WCHAR str1[], WCHAR str2[], int n) {
 
 
     int i = 0;
@@ -339,23 +362,23 @@ bool ComprareNStringWIDE(WCHAR str1[], WCHAR str2[], int n) {
     return TRUE;
 }
 
-bool CompareStringASCII(CHAR str1[], CHAR str2[]) {
+BOOL CompareStringASCII(CHAR str1[], CHAR str2[]) {
 
     if (custom_strlen(str1) != custom_strlen(str2)) {
-        return false;
+        return FALSE;
     }
 
     int i = 0;
     while (str1[i] && str2[i]) {
 
         if (str1[i] != str2[i]) {
-            return false; // Characters don't match, strings are different
+            return FALSE; // Characters don't match, strings are different
         }
         i++;
     }
 
     // Check if both strings have reached the null terminator at the same time
-    return true;
+    return TRUE;
 }
 
 BOOL ComprareStringWIDE(WCHAR str1[], WCHAR str2[]) {

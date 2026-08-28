@@ -2,6 +2,7 @@
 #include "misc.h"
 #include "headers.h"
 #include "syscalls.h"
+#include "api_hash.h"
 
 
 SYSCALL_ENTRY g_zw_functions[AmountofSyscalls] = { 0 };
@@ -56,41 +57,12 @@ bool retrieve_zw_func_s(IN HMODULE hm, IN PSYSCALL_ENTRY syscalls)
     PDWORD func_addr_array = (PDWORD)(lib_base + p_img_export_dir->AddressOfFunctions);
     PWORD func_ordinal_array = (PWORD)(lib_base + p_img_export_dir->AddressOfNameOrdinals);
 
-    //variables for syscall
-    CHAR str_zw[] = { 'Z','w' };
-
-    CHAR str_ZwFlushInstructionCache[] = { 'Z','w','F','l','u','s','h','I','n','s','t','r','u','c','t','i','o','n','C','a','c','h','e','\0' };
-
-    CHAR str_ZwCreateSection[] = { 'Z', 'w', 'C', 'r', 'e', 'a', 't', 'e', 'S', 'e', 'c', 't', 'i', 'o', 'n', '\0' };
-    CHAR str_ZwMapViewOfSection[] = { 'Z', 'w', 'M', 'a', 'p', 'V', 'i', 'e', 'w', 'O', 'f', 'S', 'e', 'c', 't', 'i', 'o', 'n', '\0' };
-    CHAR str_ZwUnmapViewOfSection[] = { 'Z', 'w', 'U', 'n', 'm', 'a', 'p', 'V', 'i', 'e', 'w', 'O', 'f', 'S', 'e', 'c', 't', 'i', 'o', 'n', '\0' };
-
-    CHAR str_ZwQuerySystemInformation[] = { 'Z', 'w', 'Q', 'u', 'e', 'r', 'y', 'S', 'y', 's', 't', 'e', 'm', 'I', 'n', 'f', 'o', 'r', 'm', 'a', 't', 'i', 'o', 'n', '\0' };
-    CHAR str_ZwQueryObject[] = { 'Z', 'w', 'Q', 'u', 'e', 'r', 'y', 'O', 'b', 'j', 'e', 'c', 't', '\0' };
-    CHAR str_ZwDuplicateObject[] = { 'Z', 'w', 'D', 'u', 'p', 'l', 'i', 'c', 'a', 't', 'e', 'O', 'b', 'j', 'e', 'c', 't', '\0' };
-
-    CHAR str_ZwOpenProcess[] = { 'Z', 'w', 'O', 'p', 'e', 'n', 'P', 'r', 'o', 'c', 'e', 's', 's', '\0' };
-    CHAR str_ZwCreateThreadEx[] = { 'Z', 'w', 'C', 'r', 'e', 'a', 't', 'e', 'T', 'h', 'r', 'e', 'a', 'd', 'E', 'x', '\0' };
-    CHAR str_ZwSetContextThread[] = { 'Z', 'w', 'S', 'e', 't', 'C', 'o', 'n', 't', 'e', 'x', 't', 'T', 'h', 'r', 'e', 'a', 'd', '\0' };
-    CHAR str_ZwGetContextThread[] = { 'Z', 'w', 'G', 'e', 't', 'C', 'o', 'n', 't', 'e', 'x', 't', 'T', 'h', 'r', 'e', 'a', 'd', '\0' };
-
-    CHAR str_ZwReadVirtualMemory[] = { 'Z', 'w', 'R', 'e', 'a', 'd', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
-    CHAR str_ZwWriteVirtualMemory[] = { 'Z', 'w', 'W', 'r', 'i', 't', 'e', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
-    CHAR str_ZwAllocateVirtualMemory[] = { 'Z', 'w', 'A', 'l', 'l', 'o', 'c', 'a', 't', 'e', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
-    CHAR str_ZwProtectVirtualMemory[] = { 'Z', 'w', 'P', 'r', 'o', 't', 'e', 'c', 't', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
-    CHAR str_ZwQueryVirtualMemory[] = { 'Z', 'w', 'Q', 'u', 'e', 'r', 'y', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
-    CHAR str_ZwFreeVirtualMemory[] = { 'Z', 'w', 'F', 'r', 'e', 'e', 'V', 'i', 'r', 't', 'u', 'a', 'l', 'M', 'e', 'm', 'o', 'r', 'y', '\0' };
-
-    CHAR str_ZwOpenProcessToken[] = { 'Z', 'w', 'O', 'p', 'e', 'n', 'P', 'r', 'o', 'c', 'e', 's', 's', 'T', 'o', 'k', 'e', 'n', '\0' };
-    CHAR str_ZwAdjustPrivilegesToken[] = { 'Z', 'w', 'A', 'd', 'j', 'u', 's', 't', 'P', 'r', 'i', 'v', 'i', 'l', 'e', 'g', 'e', 's', 'T', 'o', 'k', 'e', 'n', '\0' };
-
 
     PBYTE func_addr = 0;
     uintptr_t func_addr_value = 0;
 
     int syscall_entries = 0;
     int zw_func_counter = 0;
-    DWORD syscall_half[500] = { 0 };
 
 
 
@@ -99,202 +71,166 @@ bool retrieve_zw_func_s(IN HMODULE hm, IN PSYSCALL_ENTRY syscalls)
     {
         CHAR* func_name = (CHAR*)(lib_base + func_name_array[i]);
 
-        if (!CompareNStringASCII(str_zw, func_name, 2))
+        if (func_name[0] != 'Z' || func_name[1] != 'w')
             continue;
+
+        DWORD name_hash = HashStringA(func_name);
 
         func_addr = (PBYTE)(lib_base + func_addr_array[func_ordinal_array[i]]);
         func_addr_value = (uintptr_t)func_addr;
 
-        syscall_half[zw_func_counter++] = (DWORD)(func_addr_value & 0xFFFFFFFF);
-
-        if (CompareStringASCII(str_ZwFlushInstructionCache, func_name)) {
+        if (name_hash == HASH_ZWFLUSHINSTRUCTIONCACHE) {
             syscalls[ZwFlushInstructionCacheF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwFlushInstructionCacheF].SSN, (uintptr_t*)&syscalls[ZwFlushInstructionCacheF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwFlushInstructionCacheF].sysretAddr = NULL;
-            //syscalls[ZwFlushInstructionCacheF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwFlushInstructionCacheF].SSN,
+                (uintptr_t*)&syscalls[ZwFlushInstructionCacheF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-
-
-        if (CompareStringASCII(str_ZwCreateSection, func_name)) {
+        else if (name_hash == HASH_ZWCREATESECTION) {
             syscalls[ZwCreateSectionF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwCreateSectionF].SSN, (uintptr_t*)&syscalls[ZwCreateSectionF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwCreateSectionF].sysretAddr = NULL;
-            //syscalls[ZwCreateSectionF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwCreateSectionF].SSN,
+                (uintptr_t*)&syscalls[ZwCreateSectionF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwMapViewOfSection, func_name)) {
+        else if (name_hash == HASH_ZWMAPVIEWOFSECTION) {
             syscalls[ZwMapViewOfSectionF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwMapViewOfSectionF].SSN, (uintptr_t*)&syscalls[ZwMapViewOfSectionF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwMapViewOfSectionF].sysretAddr = NULL;
-            //syscalls[ZwMapViewOfSectionF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwMapViewOfSectionF].SSN,
+                (uintptr_t*)&syscalls[ZwMapViewOfSectionF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwUnmapViewOfSection, func_name)) {
+        else if (name_hash == HASH_ZWUNMAPVIEWOFSECTION) {
             syscalls[ZwUnmapViewOfSectionF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwUnmapViewOfSectionF].SSN, (uintptr_t*)&syscalls[ZwUnmapViewOfSectionF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwUnmapViewOfSectionF].sysretAddr = NULL;
-            //syscalls[ZwUnmapViewOfSectionF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwUnmapViewOfSectionF].SSN,
+                (uintptr_t*)&syscalls[ZwUnmapViewOfSectionF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-
-
-
-        if (CompareStringASCII(str_ZwQuerySystemInformation, func_name)) {
+        else if (name_hash == HASH_ZWQUERYSYSTEMINFORMATION) {
             syscalls[ZwQuerySystemInformationF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwQuerySystemInformationF].SSN, (uintptr_t*)&syscalls[ZwQuerySystemInformationF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwQuerySystemInformationF].sysretAddr = NULL;
-            //syscalls[ZwQuerySystemInformationF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwQuerySystemInformationF].SSN,
+                (uintptr_t*)&syscalls[ZwQuerySystemInformationF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwQueryObject, func_name)) {
+        else if (name_hash == HASH_ZWQUERYOBJECT) {
             syscalls[ZwQueryObjectF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwQueryObjectF].SSN, (uintptr_t*)&syscalls[ZwQueryObjectF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwQueryObjectF].sysretAddr = NULL;
-            //syscalls[ZwQueryObjectF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwQueryObjectF].SSN,
+                (uintptr_t*)&syscalls[ZwQueryObjectF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwDuplicateObject, func_name)) {
+        else if (name_hash == HASH_ZWDUPLICATEOBJECT) {
             syscalls[ZwDuplicateObjectF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwDuplicateObjectF].SSN, (uintptr_t*)&syscalls[ZwDuplicateObjectF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwDuplicateObjectF].sysretAddr = NULL;
-            //syscalls[ZwDuplicateObjectF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwDuplicateObjectF].SSN,
+                (uintptr_t*)&syscalls[ZwDuplicateObjectF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-
-
-
-
-        if (CompareStringASCII(str_ZwOpenProcess, func_name)) {
+        else if (name_hash == HASH_ZWOPENPROCESS) {
             syscalls[ZwOpenProcessF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwOpenProcessF].SSN, (uintptr_t*)&syscalls[ZwOpenProcessF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwOpenProcessF].sysretAddr = NULL;
-            //syscalls[ZwOpenProcessF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwOpenProcessF].SSN,
+                (uintptr_t*)&syscalls[ZwOpenProcessF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwCreateThreadEx, func_name)) {
+        else if (name_hash == HASH_ZWCREATETHREADEX) {
             syscalls[ZwCreateThreadExF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwCreateThreadExF].SSN, (uintptr_t*)&syscalls[ZwCreateThreadExF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwCreateThreadExF].sysretAddr = NULL;
-            //syscalls[ZwCreateThreadExF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwCreateThreadExF].SSN,
+                (uintptr_t*)&syscalls[ZwCreateThreadExF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwSetContextThread, func_name)) {
+        else if (name_hash == HASH_ZWSETCONTEXTTHREAD) {
             syscalls[ZwSetContextThreadF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwSetContextThreadF].SSN, (uintptr_t*)&syscalls[ZwSetContextThreadF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwSetContextThreadF].sysretAddr = NULL;
-            //syscalls[ZwSetContextThreadF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwSetContextThreadF].SSN,
+                (uintptr_t*)&syscalls[ZwSetContextThreadF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwGetContextThread, func_name)) {
+        else if (name_hash == HASH_ZWGETCONTEXTTHREAD) {
             syscalls[ZwGetContextThreadF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwGetContextThreadF].SSN, (uintptr_t*)&syscalls[ZwGetContextThreadF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwGetContextThreadF].sysretAddr = NULL;
-            //syscalls[ZwGetContextThreadF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwGetContextThreadF].SSN,
+                (uintptr_t*)&syscalls[ZwGetContextThreadF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-
-
-
-
-        if (CompareStringASCII(str_ZwReadVirtualMemory, func_name)) {
+        else if (name_hash == HASH_ZWREADVIRTUALMEMORY) {
             syscalls[ZwReadVirtualMemoryF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwReadVirtualMemoryF].SSN, (uintptr_t*)&syscalls[ZwReadVirtualMemoryF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwReadVirtualMemoryF].sysretAddr = NULL;
-            //syscalls[ZwReadVirtualMemoryF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwReadVirtualMemoryF].SSN,
+                (uintptr_t*)&syscalls[ZwReadVirtualMemoryF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwWriteVirtualMemory, func_name)) {
+        else if (name_hash == HASH_ZWWRITEVIRTUALMEMORY) {
             syscalls[ZwWriteVirtualMemoryF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwWriteVirtualMemoryF].SSN, (uintptr_t*)&syscalls[ZwWriteVirtualMemoryF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwWriteVirtualMemoryF].sysretAddr = NULL;
-            //syscalls[ZwWriteVirtualMemoryF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwWriteVirtualMemoryF].SSN,
+                (uintptr_t*)&syscalls[ZwWriteVirtualMemoryF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwAllocateVirtualMemory, func_name)) {
+        else if (name_hash == HASH_ZWALLOCATEVIRTUALMEMORY) {
             syscalls[ZwAllocateVirtualMemoryF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwAllocateVirtualMemoryF].SSN, (uintptr_t*)&syscalls[ZwAllocateVirtualMemoryF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwAllocateVirtualMemoryF].sysretAddr = NULL;
-            //syscalls[ZwAllocateVirtualMemoryF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwAllocateVirtualMemoryF].SSN,
+                (uintptr_t*)&syscalls[ZwAllocateVirtualMemoryF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwProtectVirtualMemory, func_name)) {
+        else if (name_hash == HASH_ZWPROTECTVIRTUALMEMORY) {
             syscalls[ZwProtectVirtualMemoryF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwProtectVirtualMemoryF].SSN, (uintptr_t*)&syscalls[ZwProtectVirtualMemoryF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwProtectVirtualMemoryF].sysretAddr = NULL;
-            //syscalls[ZwProtectVirtualMemoryF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwProtectVirtualMemoryF].SSN,
+                (uintptr_t*)&syscalls[ZwProtectVirtualMemoryF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwQueryVirtualMemory, func_name)) {
+        else if (name_hash == HASH_ZWQUERYVIRTUALMEMORY) {
             syscalls[ZwQueryVirtualMemoryF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwQueryVirtualMemoryF].SSN, (uintptr_t*)&syscalls[ZwQueryVirtualMemoryF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwQueryVirtualMemoryF].sysretAddr = NULL;
-            //syscalls[ZwQueryVirtualMemoryF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwQueryVirtualMemoryF].SSN,
+                (uintptr_t*)&syscalls[ZwQueryVirtualMemoryF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwFreeVirtualMemory, func_name)) {
+        else if (name_hash == HASH_ZWFREEVIRTUALMEMORY) {
             syscalls[ZwFreeVirtualMemoryF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwFreeVirtualMemoryF].SSN, (uintptr_t*)&syscalls[ZwFreeVirtualMemoryF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwFreeVirtualMemoryF].sysretAddr = NULL;
-            //syscalls[ZwFreeVirtualMemoryF].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwFreeVirtualMemoryF].SSN,
+                (uintptr_t*)&syscalls[ZwFreeVirtualMemoryF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-
-
-
-
-        if (CompareStringASCII(str_ZwOpenProcessToken, func_name)) {
+        else if (name_hash == HASH_ZWOPENPROCESSTOKEN) {
             syscalls[ZwOpenProcessTokenF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwOpenProcessTokenF].SSN, (uintptr_t*)&syscalls[ZwOpenProcessTokenF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwOpenProcessToken].sysretAddr = NULL;
-            //syscalls[ZwOpenProcessToken].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwOpenProcessTokenF].SSN,
+                (uintptr_t*)&syscalls[ZwOpenProcessTokenF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
-        if (CompareStringASCII(str_ZwAdjustPrivilegesToken, func_name)) {
+        else if (name_hash == HASH_ZWADJUSTPRIVILEGESTOKEN) {
             syscalls[ZwAdjustPrivilegesTokenF].funcAddr = (FARPROC)func_addr;
-            result = extract_ssn_ret_addr(func_addr, (PDWORD)&syscalls[ZwAdjustPrivilegesTokenF].SSN, (uintptr_t*)&syscalls[ZwAdjustPrivilegesTokenF].sysretAddr);
-            if (!result) return result;
-            //syscalls[ZwAdjustPrivilegesToken].sysretAddr = NULL;
-            //syscalls[ZwAdjustPrivilegesToken].SSN = 0;
+            result = extract_ssn_ret_addr(func_addr,
+                (PDWORD)&syscalls[ZwAdjustPrivilegesTokenF].SSN,
+                (uintptr_t*)&syscalls[ZwAdjustPrivilegesTokenF].sysretAddr);
+            if (!result) return false;
             syscall_entries++;
         }
-
     }
 
     return result;

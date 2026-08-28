@@ -1,8 +1,6 @@
 #pragma once
-#include "pch.h"
 #include "framework.h"
 #include "headers.h"
-
 
 /*---------FUNCTIONS PROTOTYPES--------------*/
 FARPROC GPARO(IN HMODULE hModule, IN int ordinal);
@@ -12,5 +10,3 @@ HMODULE GMHR_Hash(DWORD dwModuleHash);
 
 FARPROC GPAR(IN HMODULE hModule, IN CHAR lpApiName[]);
 FARPROC GPAR_Hash(IN HMODULE hModule, IN DWORD dwApiHash);
-
-DWORD WINAPI ThreadProc(LPVOID lpParameter);

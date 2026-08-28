@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Windows.h>
+#include "ldr.h"
 #include "syscalls.h"
 
 #define SET_DR_REGISTER(ctx, index, addr) \
@@ -81,8 +82,7 @@ VOID unset_hwbp(DrIndex index)
     ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
 
     SYSCALL_ENTRY zw_func_s[AmountofSyscalls] = { 0 };
-    WCHAR wstr_ntdll[] = { L'n', L't', L'd', L'l', L'l', L'.', L'd', L'l', L'l', L'\0' };
-    retrieve_zw_func_s(GMHR(wstr_ntdll), zw_func_s);
+    retrieve_zw_func_s(GMHR_Hash(HASH_NTDLLDLL), zw_func_s);
 
     ZwGetContextThread(
         (HANDLE)-2,

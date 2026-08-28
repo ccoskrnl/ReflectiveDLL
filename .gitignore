@@ -364,3 +364,7 @@ FodyWeavers.xsd
 /hwbp_test
 /test
 /utils_test
+/test_injector/test_injector.vcxproj
+/test_injector/test_injector.vcxproj.filters
+/test_injector/agent.id
+/test_injector

@@ -9,6 +9,9 @@
 #define custom_max(a, b)    ((a) < (b) ? (b) : (a))
 
 
+DWORD HashStringW(const wchar_t* str);
+DWORD HashStringA(const char* str);
+
 void* custom_malloc(SIZE_T size);
 void custom_free(void* addr);
 void* custom_memset(void* ptr, int value, unsigned long n);
@@ -33,9 +36,9 @@ size_t custom_mbstowcs(WCHAR dest[], CHAR src[], size_t n);
 
 int str_icmp(const char* str1, const char* str2);
 int custom_strcmp(const char* s1, const char* s2);
-bool CompareNStringASCII(CHAR str1[], CHAR str2[], int n);
-bool CompareStringASCII(CHAR str1[], CHAR str2[]);
-bool ComprareNStringWIDE(WCHAR str1[], WCHAR str2[], int n);  // Note: name intentionally matches implementation
+BOOL CompareNStringASCII(CHAR str1[], CHAR str2[], int n);
+BOOL CompareStringASCII(CHAR str1[], CHAR str2[]);
+BOOL ComprareNStringWIDE(WCHAR str1[], WCHAR str2[], int n);  // Note: name intentionally matches implementation
 BOOL ComprareStringWIDE(WCHAR str1[], WCHAR str2[]);
 
 void custom_wsstr(WCHAR str[], int start, int length, WCHAR result[]);

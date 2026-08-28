@@ -169,10 +169,43 @@ public:
 
 	}
 
+	DWORD get_rva_of_actual_export_func(DWORD func_raw, DWORD func_rva) {
+		if (!func_raw) return 0;
+		BYTE* code = (BYTE*)(func_raw + (uintptr_t)base);
+		// relative jmp
+		if (code[0] == 0xE9)
+		{
+			int32_t relative_offset = *(int32_t*)(code + 1);
+
+			uintptr_t next_instruction = ((uintptr_t)func_rva + 5);
+			uintptr_t real_func_addr = ((uintptr_t)next_instruction + relative_offset);
+
+			return real_func_addr;
+		}
+
+		// indirect jmp
+		if (code[0] == 0xff && code[1] == 0x25)
+		{
+			// x64: FF 25 [32bits relative offset]
+			uint32_t relative_offset = *(int32_t*)(code + 2);
+			// 6 = FF25(2) + offset(4)
+			uintptr_t next_inst = func_rva + 6;
+			uintptr_t real_func_addr = next_inst + relative_offset;
+
+			return real_func_addr;
+		}
+		return func_rva;
+	}
+
 	DWORD get_func_size(const char* func_name)
 	{
-		uintptr_t func_rva = get_func_rva(func_name);
-		uintptr_t func_end_rva = 0;
+		DWORD wrapper_func_rva = get_func_rva(func_name);
+		DWORD wrapper_func_raw = rva2raw(wrapper_func_rva);
+
+		DWORD actual_func_rva = get_rva_of_actual_export_func(wrapper_func_raw, wrapper_func_rva);
+		DWORD actual_func_raw = resolve_jmp_to_actual_function(wrapper_func_raw);
+
+		uintptr_t actual_func_end_rva = 0;
 
 		PRUNTIME_FUNCTION p_runtime_func = (PRUNTIME_FUNCTION)(base + rva2raw(optional_header.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress));
 
@@ -182,17 +215,17 @@ public:
 			if (p_runtime_func[i].BeginAddress == 0 && p_runtime_func[i].EndAddress == 0 && p_runtime_func[i].UnwindData == 0)
 				continue;
 
-			if (p_runtime_func[i].BeginAddress == func_rva) {
+			if (p_runtime_func[i].BeginAddress == actual_func_rva) {
 
-				func_end_rva = p_runtime_func[i].EndAddress;
+				actual_func_end_rva = p_runtime_func[i].EndAddress;
 				break;
 			}
 
 		}
-		if (func_end_rva == 0)
+		if (actual_func_end_rva == 0)
 			return 0;
 
-		return (DWORD)(func_end_rva - func_rva);
+		return (DWORD)(actual_func_end_rva - actual_func_rva);
 
 	}
 

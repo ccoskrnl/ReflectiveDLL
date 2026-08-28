@@ -84,6 +84,9 @@
     <ClInclude Include="beacon.h">
       <Filter>头文件\c2</Filter>
     </ClInclude>
+    <ClInclude Include="api_hash.h">
+      <Filter>头文件\rf</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="net.cpp">
@@ -140,6 +143,9 @@
   </ItemGroup>
   <ItemGroup>
     <MASM Include="syscall.asm">
+      <Filter>源文件\rf</Filter>
+    </MASM>
+    <MASM Include="get_peb.asm">
       <Filter>源文件\rf</Filter>
     </MASM>
   </ItemGroup>

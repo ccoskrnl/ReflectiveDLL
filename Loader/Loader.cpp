@@ -2,7 +2,9 @@
 //
 
 #include <Windows.h>
+#include <winternl.h>
 #include <iostream>
+
 
 int main()
 {

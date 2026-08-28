@@ -350,6 +350,7 @@ namespace c2 {
                 actual = sleeptime + (rand() % (2 * jitter + 1)) - jitter;
             if (actual < 1)
                 actual = 1;
+            printf("[beacon] sleaping %d s\n", actual);
             sleaping((DWORD64)(actual * 1000), &sleaping_para);
         }
     }
