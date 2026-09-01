@@ -368,3 +368,8 @@ FodyWeavers.xsd
 /test_injector/test_injector.vcxproj.filters
 /test_injector/agent.id
 /test_injector
+/Loader/Loader.vcxproj
+/Loader/Loader.vcxproj.filters
+/Loader
+/Shellcode/shellcode.exe
+/Shellcode/shellcode.bin

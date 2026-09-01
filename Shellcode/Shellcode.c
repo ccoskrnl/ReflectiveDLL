@@ -32,13 +32,3 @@ void entrypoint()
 	if (thread == NULL)
 		return FALSE;
 }
-
-int main(void)
-{
-
-	WCHAR* ws2_str = L"ws2_32.dll";
-	LoadLibraryW(ws2_str);
-	VOID* wsa_startup = (VOID*)GPARO(GMHR(ws2_str), 4);
-
-	entrypoint();
-}
