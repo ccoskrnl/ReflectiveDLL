@@ -465,7 +465,47 @@ static void rfdll_protect_sections(PBYTE base, PIMAGE_NT_HEADERS64 nt_header, fn
 
 /* ============================== main flow ============================== */
 
-UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
+/*
+ * Undo a prepared image that is not going to run: the TLS callbacks get
+ * DLL_PROCESS_DETACH, the exception table entry (when one was registered) is
+ * removed so no dynamic function table keeps pointing into memory that is about
+ * to be released, and the image is freed.
+ *
+ * The caller has already given the image entry point DLL_PROCESS_DETACH when it
+ * had been entered; this covers the part that happens after that.
+ */
+static void rfdll_unload_image(PBYTE base, fnVirtualFree virtual_free,
+	fnRtlDeleteFunctionTable delete_function_table, BOOL registered)
+{
+	PIMAGE_DOS_HEADER dos_header = NULL;
+	PIMAGE_NT_HEADERS64 nt_header = NULL;
+
+	if (base == NULL)
+		return;
+
+	/* The TLS callback array is read from the image, so it is released last. */
+	dos_header = (PIMAGE_DOS_HEADER)base;
+	nt_header = (PIMAGE_NT_HEADERS64)(base + dos_header->e_lfanew);
+
+	rfdll_call_tls_callbacks(base, nt_header, DLL_PROCESS_DETACH);
+
+	if (registered && delete_function_table != NULL)
+		rfdll_unregister_exception_table(base, nt_header, delete_function_table);
+
+	if (virtual_free != NULL)
+		virtual_free(base, 0, MEM_RELEASE);
+}
+
+/*
+ * Map and prepare the image without entering it, for callers that need to run
+ * code of their own between the mapping and the entry point (the packed
+ * executing entry point wipes the payload in that window and then jumps).
+ *
+ * On success the caller owns the image and has to either enter it or release it
+ * with VirtualFree; on failure everything applied here is already undone.
+ */
+PBYTE rfdll_prepare_image(PVOID image, UINT64 image_size, DWORD* entry_rva,
+	DWORD* out_size, BOOL* needs_delete_table)
 {
 	PIMAGE_DOS_HEADER dos_header = NULL;
 	PIMAGE_NT_HEADERS64 nt_header = NULL;
@@ -473,7 +513,6 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	DWORD64 preferred_base = 0;
 	DWORD64 delta = 0;
 	DWORD size_of_image = 0;
-	DWORD entry_point_rva = 0;
 	HMODULE kernel32 = NULL;
 	HMODULE ntdll = NULL;
 	fnLoadLibraryA load_library = NULL;
@@ -485,31 +524,38 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	fnRtlDeleteFunctionTable delete_function_table = NULL;
 	UINT64 sections_end = 0;
 
+	if (entry_rva != NULL)
+		*entry_rva = 0;
+	if (out_size != NULL)
+		*out_size = 0;
+	if (needs_delete_table != NULL)
+		*needs_delete_table = FALSE;
+
 	if (image == NULL)
-		return 0;
+		return NULL;
 
 	/* Everything below works on DWORDs, so clamp sizes that cannot occur. */
 	if (image_size > RFDLL_MAX_IMAGE_SIZE)
 		image_size = RFDLL_MAX_IMAGE_SIZE;
 	if (image_size < sizeof(IMAGE_DOS_HEADER))
-		return 0;
+		return NULL;
 
 	/* ---------- 1. validate the PE ---------- */
 	dos_header = (PIMAGE_DOS_HEADER)image;
 	if (dos_header->e_magic != IMAGE_DOS_SIGNATURE)
-		return 0;
+		return NULL;
 	if ((UINT64)dos_header->e_lfanew + sizeof(IMAGE_NT_HEADERS64) > image_size)
-		return 0;
+		return NULL;
 
 	nt_header = (PIMAGE_NT_HEADERS64)((PBYTE)image + dos_header->e_lfanew);
 	if (nt_header->Signature != IMAGE_NT_SIGNATURE)
-		return 0;
+		return NULL;
 	if (nt_header->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64)
-		return 0;
+		return NULL;
 	if (nt_header->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
-		return 0;
+		return NULL;
 	if (nt_header->FileHeader.NumberOfSections == 0 || nt_header->FileHeader.NumberOfSections > 96)
-		return 0;
+		return NULL;
 
 	/*
 	 * SizeOfOptionalHeader decides where the section table starts, so it has to
@@ -517,22 +563,24 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	 * buffer the caller handed us before rfdll_map_sections reads it.
 	 */
 	if (nt_header->FileHeader.SizeOfOptionalHeader != sizeof(IMAGE_OPTIONAL_HEADER64))
-		return 0;
+		return NULL;
 	sections_end = (UINT64)dos_header->e_lfanew + sizeof(IMAGE_NT_HEADERS64) +
 		(UINT64)nt_header->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER);
 	if (sections_end > image_size)
-		return 0;
+		return NULL;
 
 	size_of_image = nt_header->OptionalHeader.SizeOfImage;
 	preferred_base = (DWORD64)nt_header->OptionalHeader.ImageBase;
-	entry_point_rva = nt_header->OptionalHeader.AddressOfEntryPoint;
 	if (size_of_image == 0 || size_of_image > RFDLL_MAX_IMAGE_SIZE)
-		return 0;
+		return NULL;
 
-	/* ---------- 2. resolve the APIs by hash, leaving no static imports ---------- */
+	if (entry_rva != NULL)
+		*entry_rva = nt_header->OptionalHeader.AddressOfEntryPoint;
+
+	/* ---------- 2. resolve the APIs the mapping needs ---------- */
 	kernel32 = GMHR_Hash(HASH_KERNEL32);
 	if (kernel32 == NULL)
-		return 0;
+		return NULL;
 
 	load_library = (fnLoadLibraryA)GPAR_Hash(kernel32, HASH_LOADLIBRARYA);
 	get_proc_address = (fnGetProcAddress)GPAR_Hash(kernel32, HASH_GETPROCADDRESS);
@@ -541,8 +589,17 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	virtual_protect = (fnVirtualProtect)GPAR_Hash(kernel32, HASH_VIRTUALPROTECT);
 	if (load_library == NULL || get_proc_address == NULL || virtual_alloc == NULL ||
 		virtual_free == NULL || virtual_protect == NULL)
-		return 0;
+	{
+		return NULL;
+	}
 
+	/*
+	 * The exception table helpers are best effort: without ntdll, or without
+	 * these two exports, exception handling inside the image is simply not
+	 * registered, and the registration is only recorded as undoable when both
+	 * are available (with only one of them a registration could never be
+	 * removed again).
+	 */
 	ntdll = GMHR_Hash(HASH_NTDLL);
 	if (ntdll != NULL)
 	{
@@ -550,16 +607,17 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 		delete_function_table = (fnRtlDeleteFunctionTable)GPAR_Hash(ntdll, HASH_RTLDELETEFUNCTIONTABLE);
 	}
 
-	/* ---------- 3. allocate the image, preferred base first ---------- */
-	base = (PBYTE)virtual_alloc((LPVOID)preferred_base, size_of_image,
-		MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	/* ---------- 3. reserve the image ---------- */
+	base = (PBYTE)virtual_alloc((PVOID)(ULONG_PTR)preferred_base, size_of_image,
+		MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 	if (base == NULL)
 	{
+		/* The preferred base is taken, so let the system pick an address. */
 		base = (PBYTE)virtual_alloc(NULL, size_of_image,
-			MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+			MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 	}
 	if (base == NULL)
-		return 0;
+		return NULL;
 
 	delta = (DWORD64)base - preferred_base;
 
@@ -572,7 +630,7 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 		if (!rfdll_relocate_image(base, nt_header, delta))
 		{
 			virtual_free(base, 0, MEM_RELEASE);
-			return 0;
+			return NULL;
 		}
 	}
 
@@ -580,18 +638,23 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	if (!rfdll_fix_imports(base, nt_header, load_library, get_proc_address))
 	{
 		virtual_free(base, 0, MEM_RELEASE);
-		return 0;
+		return NULL;
 	}
 
 	/*
 	 * ---------- 7. exception table ----------
 	 * Registered before the TLS callbacks run, like the real loader does: a TLS
-	 * callback that raises an exception needs the .pdata entries already in place.
-	 * The delete helper has to be available as well, otherwise a registration
-	 * could not be undone if the load has to be abandoned later.
+	 * callback that raises an exception needs the .pdata entries already in
+	 * place. The delete helper has to be available as well, otherwise a
+	 * registration could not be undone if the load has to be abandoned later.
 	 */
 	if (add_function_table != NULL && delete_function_table != NULL)
+	{
 		rfdll_register_exception_table(base, nt_header, add_function_table);
+
+		if (needs_delete_table != NULL)
+			*needs_delete_table = TRUE;
+	}
 
 	/* ---------- 8. TLS callbacks ---------- */
 	rfdll_call_tls_callbacks(base, nt_header, DLL_PROCESS_ATTACH);
@@ -599,7 +662,45 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	/* ---------- 9. per-section page protection ---------- */
 	rfdll_protect_sections(base, nt_header, virtual_protect);
 
-	/* ---------- 10. enter the image entry point with DLL_PROCESS_ATTACH ---------- */
+	if (out_size != NULL)
+		*out_size = size_of_image;
+
+	return base;
+}
+
+UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
+{
+	PBYTE base = NULL;
+	DWORD entry_point_rva = 0;
+	DWORD size_of_image = 0;
+	BOOL registered = FALSE;
+	HMODULE kernel32 = NULL;
+	HMODULE ntdll = NULL;
+	fnVirtualFree virtual_free = NULL;
+	fnRtlDeleteFunctionTable delete_function_table = NULL;
+
+	base = rfdll_prepare_image(image, image_size, &entry_point_rva, &size_of_image, &registered);
+	if (base == NULL)
+		return 0;
+
+	/*
+	 * The image is mapped and prepared; what is left is entering it. The undo
+	 * path needs VirtualFree and, only when a registration happened, the delete
+	 * helper, so they are resolved again here rather than returned by
+	 * rfdll_prepare_image.
+	 */
+	kernel32 = GMHR_Hash(HASH_KERNEL32);
+	if (kernel32 != NULL)
+		virtual_free = (fnVirtualFree)GPAR_Hash(kernel32, HASH_VIRTUALFREE);
+
+	if (registered)
+	{
+		ntdll = GMHR_Hash(HASH_NTDLL);
+		if (ntdll != NULL)
+			delete_function_table = (fnRtlDeleteFunctionTable)GPAR_Hash(ntdll, HASH_RTLDELETEFUNCTIONTABLE);
+	}
+
+	/* ---------- enter the image entry point with DLL_PROCESS_ATTACH ---------- */
 	if (entry_point_rva != 0)	/* 0 means: the image simply has no entry point */
 	{
 		fnDllMain dll_main = NULL;
@@ -611,10 +712,7 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 			 * what was applied (the TLS callbacks already ran, the entry point did
 			 * not) and fail.
 			 */
-			rfdll_call_tls_callbacks(base, nt_header, DLL_PROCESS_DETACH);
-			if (add_function_table != NULL && delete_function_table != NULL)
-				rfdll_unregister_exception_table(base, nt_header, delete_function_table);
-			virtual_free(base, 0, MEM_RELEASE);
+			rfdll_unload_image(base, virtual_free, delete_function_table, registered);
 			return 0;
 		}
 
@@ -629,10 +727,7 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 			 * into memory that is about to be released.
 			 */
 			dll_main((HINSTANCE)base, DLL_PROCESS_DETACH, NULL);
-			rfdll_call_tls_callbacks(base, nt_header, DLL_PROCESS_DETACH);
-			if (add_function_table != NULL && delete_function_table != NULL)
-				rfdll_unregister_exception_table(base, nt_header, delete_function_table);
-			virtual_free(base, 0, MEM_RELEASE);
+			rfdll_unload_image(base, virtual_free, delete_function_table, registered);
 			return 0;
 		}
 	}

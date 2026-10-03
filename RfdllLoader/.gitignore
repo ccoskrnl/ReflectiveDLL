@@ -4,6 +4,8 @@ loader.bin
 loader.exe
 loader_packed.bin
 loader_packed.exe
+loader_exec.bin
+loader_exec.exe
 
 # Build outputs of the end to end test (test/build_test.cmd).
 test/*.dll

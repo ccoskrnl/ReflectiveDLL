@@ -32,3 +32,28 @@ typedef BOOLEAN(NTAPI* fnRtlDeleteFunctionTable)(
  *              image memory is released.
  */
 UINT64 rfdll_load_image(PVOID image, UINT64 image_size);
+
+/*
+ * Map the raw PE file bytes and prepare them to run, but do not call the image
+ * entry point: hand it back to the caller instead.
+ *
+ * Used by the packed executing entry point, which has to wipe the payload and
+ * then jump into the entry point rather than call it, so that no return address
+ * into the payload is left on the stack. Everything rfdll_load_image does except
+ * the entry point call happens here as well (sections, relocations, imports,
+ * exception table, TLS callbacks, page protection).
+ *
+ * Parameters:
+ *   image      : address of the raw PE file bytes (on-disk layout, not mapped)
+ *   image_size : size of that buffer
+ *   entry_rva  : receives AddressOfEntryPoint of the mapped image
+ *   out_size   : receives SizeOfImage of that mapping
+ *   needs_delete_table : receives TRUE when an exception table entry was
+ *                        registered, so the caller knows it should be removed
+ *                        if it has to abandon the image
+ * Returns:
+ *   success -> base address of the mapped image (not yet entered)
+ *   failure -> 0, with everything already applied undone
+ */
+PBYTE rfdll_prepare_image(PVOID image, UINT64 image_size, DWORD* entry_rva,
+	DWORD* out_size, BOOL* needs_delete_table);

@@ -68,5 +68,59 @@ typedef struct _RFDLL_PAYLOAD
 	BOOL        headers_stripped;
 } RFDLL_PAYLOAD, *PRFDLL_PAYLOAD;
 
+/*
+ * Handed to the payload DLL so it can clean up after itself.
+ *
+ * The DLL cannot find the payload on its own: it never sees the loader's stack
+ * and the image it runs from is somewhere else entirely. The loader therefore
+ * passes this structure two ways, so a DLL can use whichever it can see:
+ *
+ *   1) as the lpReserved argument of DllMain (third parameter);
+ *   2) as a copy at a fixed offset inside the mapped image, at
+ *      RFDLL_PAYLOAD_INFO_OFFSET below.
+ *
+ * The copy exists because DllMain is often reached through the CRT's
+ * _DllMainCRTStartup, which is free to pass something other than our pointer as
+ * lpReserved. The DLL knows its own base, so the fixed offset is always
+ * reachable; the build also strips the PE headers from the payload at pack
+ * time, which is what frees that part of the image for this copy.
+ *
+ * The structure is only valid until the DLL releases the payload, so a DLL that
+ * wants to keep it has to copy it first.
+ */
+#define RFDLL_PAYLOAD_INFO_MAGIC   0x494c4652    /* "RFLI" of "RFLINFO" */
+#define RFDLL_PAYLOAD_INFO_VERSION 1
+
+/* Where the copy lives inside the mapped image (inside the DOS stub area). */
+#define RFDLL_PAYLOAD_INFO_OFFSET  0x40
+#define RFDLL_PAYLOAD_INFO_SIZE    64
+
+#pragma pack(push, 1)
+typedef struct _RFDLL_PAYLOAD_INFO
+{
+	DWORD magic;         /* RFDLL_PAYLOAD_INFO_MAGIC, so a DLL can tell this
+	                        structure from uninitialized image bytes          */
+	DWORD version;       /* RFDLL_PAYLOAD_INFO_VERSION                        */
+	PVOID payload_base;  /* start of the whole payload region                 */
+	SIZE_T payload_size; /* size of that region, as the caller allocated it   */
+	PVOID image_base;    /* base of the mapped image (the HINSTANCE DllMain
+	                        receives as its first argument)                   */
+	SIZE_T image_size;   /* SizeOfImage of that mapping                       */
+	DWORD host_hash;     /* the metadata's host_hash, currently unused        */
+	DWORD flags;         /* reserved, 0                                       */
+} RFDLL_PAYLOAD_INFO, *PRFDLL_PAYLOAD_INFO;
+#pragma pack(pop)
+
 /* Entry point of the packed payload. Takes no arguments. */
 UINT64 entrypoint_packed(void);
+
+/*
+ * Entry point of the executing payload. Takes no arguments and never returns:
+ * it maps the image, wipes the payload, then jumps into the image entry point
+ * so no return address into the payload is left on the stack.
+ *
+ * Because it does not return, it cannot report a failure to its caller either:
+ * a failure ends in the loader branch restoring the stack and returning to
+ * whatever called the payload.
+ */
+void entrypoint_exec(void);
