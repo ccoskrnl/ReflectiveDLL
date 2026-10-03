@@ -145,6 +145,7 @@
     <ClCompile Include="pe_loader.c" />
     <ClCompile Include="rc4.c" />
     <ClCompile Include="loader.c" />
+    <ClCompile Include="loader_packed.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="api_hash.h" />
@@ -153,6 +154,7 @@
     <ClInclude Include="ldr.h" />
     <ClInclude Include="misc.h" />
     <ClInclude Include="pe_loader.h" />
+    <ClInclude Include="payload.h" />
     <ClInclude Include="rc4.h" />
   </ItemGroup>
   <ItemGroup>

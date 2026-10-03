@@ -1000,6 +1000,12 @@ typedef BOOL(WINAPI* fnVirtualProtect)(
     PDWORD  flProtect
     );
 
+typedef SIZE_T(WINAPI* fnVirtualQuery)(
+    LPCVOID                   lpAddress,
+    PMEMORY_BASIC_INFORMATION lpBuffer,
+    SIZE_T                    dwLength
+    );
+
 //typedef struct _IMAGE_RUNTIME_FUNCTION_ENTRY {
 //    DWORD BeginAddress;
 //    DWORD EndAddress;

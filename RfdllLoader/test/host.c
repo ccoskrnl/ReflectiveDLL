@@ -537,21 +537,92 @@ static void case_fail(rfdll_entry entry, const unsigned char* file, unsigned lon
 		"image memory was released again after the unwind");
 }
 
+/*
+ * Case 5: packed payload.
+ *
+ * The payload is loader_packed.bin followed by its metadata and the RC4
+ * encrypted DLL (see pack.py). The packed entry takes no arguments and finds
+ * the metadata by itself, so the host only has to place the bytes somewhere
+ * writable and executable and jump to offset 0.
+ *
+ * The expected image size is passed in by the caller because the packed
+ * metadata is the loader's business; the host knows it from the packer report.
+ */
+static void case_packed(const unsigned char* payload, unsigned long payload_size,
+	const unsigned char* dll_file)
+{
+	const IMAGE_NT_HEADERS64* nt = image_nt(dll_file);
+	unsigned long long preferred = (unsigned long long)nt->OptionalHeader.ImageBase;
+	unsigned long long base = 0;
+	void* payload_mem = NULL;
+	rfdll_entry entry = NULL;
+	int (*export_reloc)(void) = NULL;
+	int (*export_tls)(void) = NULL;
+
+	printf("\n=== case 5: packed payload (0 argument entry) ===\n");
+	truncate_file("target_marker.log");
+	occupy_preferred_base(dll_file);
+
+	/*
+	 * The loader needs to write while it decrypts, so the payload goes into
+	 * memory this process owns; a read only copy would fault inside the loader.
+	 */
+	payload_mem = VirtualAlloc(NULL, payload_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	if (payload_mem == NULL)
+	{
+		check(0, "host could allocate memory for the packed payload");
+		return;
+	}
+	memcpy(payload_mem, payload, payload_size);
+	FlushInstructionCache(GetCurrentProcess(), payload_mem, payload_size);
+	printf("  [*] payload: %lu bytes at %p\n", payload_size, payload_mem);
+
+	entry = (rfdll_entry)payload_mem;
+
+	/* The packed entry ignores its arguments; pass zeros to prove it. */
+	base = entry(NULL, 0);
+	printf("  [*] entry returned 0x%llx\n", base);
+	check(base != 0, "packed loader returned an image base");
+	if (base == 0)
+		return;
+
+	check(base != preferred, "packed image was relocated");
+	check(query_protect((const void*)(ULONG_PTR)base) == PAGE_READONLY, "packed PE header page is R");
+	check_sections(base, dll_file, 0);
+	dump_section_headers(base, dll_file);
+	dump_page_map(base, dll_file);
+
+	/* The DLL must be a working module, not just a mapped image. */
+	export_reloc = (int (*)(void))find_export(base, dll_file, "TestReloc");
+	export_tls = (int (*)(void))find_export(base, dll_file, "TestTlsFlag");
+	check(export_reloc != NULL, "TestReloc is reachable through the export table");
+	check(export_tls != NULL, "TestTlsFlag is reachable through the export table");
+
+	if (export_reloc != NULL)
+		check(export_reloc() != 0, "a relocated export still works in the packed image");
+	if (export_tls != NULL)
+		check(export_tls() != 0, "the TLS callback ran for the packed image");
+
+	check(file_value("target_marker.log", "dll_attach") != 0, "DllMain saw DLL_PROCESS_ATTACH in the packed image");
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* loader_bytes = NULL;
 	unsigned char* target_bytes = NULL;
 	unsigned char* fail_bytes = NULL;
+	unsigned char* payload_bytes = NULL;
 	unsigned long loader_size = 0;
 	unsigned long target_size = 0;
 	unsigned long fail_size = 0;
+	unsigned long payload_size = 0;
 	void* loader_mem = NULL;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	if (argc < 4)
 	{
-		printf("usage: %s <loader.bin> <target.dll> <fail.dll>\n", argv[0]);
+		printf("usage: %s <loader.bin> <target.dll> <fail.dll> [payload.bin]\n", argv[0]);
 		return 2;
 	}
 
@@ -578,6 +649,26 @@ int main(int argc, char** argv)
 	case_protect_only((rfdll_entry)loader_mem, target_bytes, target_size);
 	case_fail((rfdll_entry)loader_mem, fail_bytes, fail_size);
 	case_bad_entry_point((rfdll_entry)loader_mem, fail_bytes, fail_size);
+
+	/*
+	 * The packed payload is optional: it needs a 4th argument and a packer run,
+	 * so the three argument form still exercises everything above.
+	 */
+	if (argc >= 5)
+	{
+		payload_bytes = read_file(argv[4], &payload_size);
+		if (payload_bytes == NULL)
+		{
+			printf("[FAIL] cannot read %s\n", argv[4]);
+			return 2;
+		}
+		case_packed(payload_bytes, payload_size, target_bytes);
+		free(payload_bytes);
+	}
+	else
+	{
+		printf("\n=== case 5: packed payload skipped (no payload.bin argument) ===\n");
+	}
 
 	free(loader_bytes);
 	free(target_bytes);

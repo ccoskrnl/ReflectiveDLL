@@ -18,6 +18,7 @@
 #define HASH_VIRTUALALLOC         0x382c0f97    /* VirtualAlloc    */
 #define HASH_VIRTUALFREE          0x668fcf2e    /* VirtualFree     */
 #define HASH_VIRTUALPROTECT       0x844ff18d    /* VirtualProtect  */
+#define HASH_VIRTUALQUERY         0x395269c2    /* VirtualQuery    */
 
 /* ntdll.dll exports */
 #define HASH_RTLADDFUNCTIONTABLE     0xbdb9f1ae    /* RtlAddFunctionTable    */

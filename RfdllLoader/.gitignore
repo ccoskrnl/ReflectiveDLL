@@ -2,6 +2,8 @@
 # *.obj, *.pdb, *.ilk and *.log are already covered by the repository .gitignore.
 loader.bin
 loader.exe
+loader_packed.bin
+loader_packed.exe
 
 # Build outputs of the end to end test (test/build_test.cmd).
 test/*.dll
@@ -9,5 +11,9 @@ test/*.exe
 test/*.lib
 test/*.exp
 
-# Scratch directory of test/test_pack.py.
-test/packtest_scratch/
+# Scratch directories of test/test_pack.py (also leftovers of a failed run).
+test/packtest_*/
+
+# Default outputs of pack.py when it is run from this directory.
+payload.bin
+payload_info.json
