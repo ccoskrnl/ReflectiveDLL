@@ -9,6 +9,52 @@ the network and only jumps to the raw code of the export named `yolo`. This
 loader does not use the network at all; it expands a complete PE into a running
 image.
 
+## Packed payload
+
+`loader.bin` is the loader on its own: the caller has to supply the DLL bytes.
+`pack.py` produces the other shape, a single self contained buffer entered with
+**no arguments**:
+
+```
++0x0000              loader_packed.bin   the loader code
+...                  0xCC padding up to the next page boundary
++meta                RFDLL_META_HEADER   19 bytes
++meta+19             RC4 key              key_length bytes
++...                 rc4(PE image)        dll_size bytes
+```
+
+The metadata is laid out exactly as in `payload.h` (packed, 19 bytes, little
+endian for the multi byte fields):
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| +0 | 8 | magic, `"RFDLMETA"` |
+| +8 | 1 | version (`1`) |
+| +9 | 1 | flags (`0x01` = PE headers were stripped) |
+| +10 | 1 | `key_length` (0 means the image is stored in the clear) |
+| +11 | 4 | `dll_size` |
+| +15 | 4 | `host_hash` (0 = private mapping, reserved for the host module mode) |
+
+`entrypoint_packed` (`RCX`/`RDX` ignored, `RAX` = image base or `0`):
+
+1. `rfdll_get_rip()` anchors on its own address, because the entry point is
+   called with no arguments and nothing else says where the payload starts;
+2. scan forward from the next page boundary for the magic. The scan is bounded
+   by `RFDLL_SCAN_LIMIT` (64 KB) **and** by the end of the committed region that
+   `VirtualQuery` reports, so a missing metadata fails cleanly instead of
+   reading unmapped memory. Only page aligned addresses are tested, which is
+   where `pack.py` puts the header;
+3. validate version, flags, `dll_size` and `key_length`, and refuse a metadata
+   whose key plus image would run past the region found in step 2 (the metadata
+   is inside the payload, so those fields are untrusted input);
+4. RC4 the image **in place** at `data_offset`. RC4 is a stream cipher, so this
+   is the same operation as encryption; the payload must therefore be writable,
+   and the caller gives up its copy of the ciphertext;
+5. hand the decrypted image to the same `rfdll_load_image` described above.
+
+The image is decrypted where it lies, so the mapped image never contains the
+loader, and the header page is read-only once mapping is done.
+
 ## Interface
 
 The build product is `loader.bin`, a pure `.text` blob that starts executing at
@@ -80,13 +126,16 @@ build.cmd
 
 Output:
 
-* `loader.exe`: intermediate, only used to feed `objcopy`;
-* `loader.bin`: the final shellcode
-  (`objcopy -O binary -j .text loader.exe loader.bin`).
+* `loader.exe` / `loader_packed.exe`: intermediates, only used to feed `objcopy`;
+* `loader.bin`: the shellcode for the two argument form
+  (`objcopy -O binary -j .text loader.exe loader.bin`);
+* `loader_packed.bin`: the shellcode for the packed form
+  (`objcopy -O binary -j .text loader_packed.exe loader_packed.bin`).
 
-`entrypoint` has to be the first function of `.text`: `loader.c` contains that
-one function only and `loader.obj` is listed first on the link line, so offset 0
-of `loader.bin` is the entry point.
+`entrypoint` and `entrypoint_packed` each have to be the first function of
+`.text`, so the two blobs are linked separately: `loader.c` and
+`loader_packed.c` contain one function each and their object file is listed
+first on its link line. Offset 0 of each blob is therefore its entry point.
 
 ## How to call it
 
@@ -123,18 +172,30 @@ UINT64 image_base = ((rfdll_entry)loader_entry)(dll_image, dll_image_size);
 | `get_peb.asm` | copied; only the comments were translated into English (`gs:[60h]` reads the PEB) |
 | `api_hash.h` | based on the original, extended with `HASH_NTDLL`, `HASH_VIRTUALPROTECT`, `HASH_RTLADDFUNCTIONTABLE` and `HASH_RTLDELETEFUNCTIONTABLE` |
 
-New: `loader.c` (entry point), `pe_loader.c` / `pe_loader.h` (reflective mapping
-logic), `build.cmd`, project files.
+New: `loader.c` (entry point for the two argument form), `loader_packed.c` and
+`payload.h` (self locating entry point and the payload layout), `pe_loader.c` /
+`pe_loader.h` (reflective mapping logic), `rc4.c` / `rc4.h` (in place stream
+cipher), `get_rip.asm` (RIP anchor for the argument-less entry point),
+`pack.py` (payload packer), `build.cmd`, project files.
 
 ## End to end test
 
-`test/` holds a self contained test of the loader (four cases, 41 checks). Build it from
-a VS developer command prompt, after `build.cmd` produced `loader.bin`:
+`test/` holds a self contained test of the loader (five cases, 56 checks when a
+packed payload is supplied). Build it from a VS developer command prompt, after
+`build.cmd` produced `loader.bin`:
 
 ```
 cd test
 build_test.cmd
 host.exe ..\loader.bin target.dll fail.dll
+```
+
+The packed form is optional and needs a payload built by `pack.py` first:
+
+```
+python ..\pack.py --dll target.dll --loader ..\loader_packed.bin ^
+    --out packtest_b2b\payload.bin --info packtest_b2b\payload_info.json --seed 1234
+host.exe ..\loader.bin target.dll fail.dll packtest_b2b\payload.bin
 ```
 
 * `target_dll.c`: payload that records every step in `target_marker.log` (kernel32 only,
@@ -143,7 +204,10 @@ host.exe ..\loader.bin target.dll fail.dll
 * `fail_dll.c`: payload whose `DllMain` returns `FALSE` for `DLL_PROCESS_ATTACH`, used to
   check the unwind path;
 * `host.c`: maps `loader.bin` as code, occupies the payload's preferred base so the loader
-  has to relocate, and runs the three cases.
+  has to relocate, and runs the cases;
+* `test_rc4.c` and `test_pack.py` cover the cipher and the packer on their own
+  (published RC4 vectors, round trips, the metadata layout and the stripping
+  rules).
 
 | Case | What it verifies |
 | --- | --- |
@@ -151,6 +215,7 @@ host.exe ..\loader.bin target.dll fail.dll
 | 2 - load `fail.dll` | the loader returns 0 and unwinds in loader order: `DllMain(DLL_PROCESS_DETACH)`, TLS callback with `DLL_PROCESS_DETACH`, then releases the image (the base logged by `DllMain` is `MEM_FREE` afterwards) |
 | 3 - load `target.dll` with `AddressOfEntryPoint` zeroed | the exact per section page protection the loader applies, because no payload code runs; also covers the "an image without an entry point is accepted" path |
 | 4 - load `fail.dll` with its entry point RVA outside the image | the loader treats the image as malformed: it returns 0, releases the TLS callbacks with `DLL_PROCESS_DETACH`, never calls the entry point, and frees the image |
+| 5 - packed payload, entry called with **no** arguments | the packed entry finds its own metadata, decrypts the image in place and maps it: the 64 bit region bound, the RC4 step and the metadata layout all work together, and the resulting image passes the same relocation / protection / export / TLS checks as case 1 |
 
 Behaviour the test pins down:
 
@@ -179,7 +244,17 @@ Behaviour the test pins down:
   initial `PAGE_EXECUTE_READWRITE`; a failed `VirtualProtect` is not fatal;
 * `FlushInstructionCache` is not called (the `Shellcode` project does not either);
 * the image is not linked into the PEB module lists (it never shows up in
-  `InLoadOrderModuleList`).
+  `InLoadOrderModuleList`);
+* in the packed form the RC4 key sits in the payload right next to the
+  ciphertext, so the ciphertext is only as secret as the payload itself (this
+  hides the DLL on disk and from a plaintext scan of the buffer, it is not key
+  management);
+* the packed form requires the metadata to be reachable by a forward page scan
+  within the same committed region as the code, and it needs the payload to stay
+  writable until the decrypt is done;
+* `host_hash` is written by the packer and validated by the loader, but the host
+  module placement mode it is meant for is not implemented yet: a non zero value
+  is currently carried along and ignored.
 
 ## Notes
 
