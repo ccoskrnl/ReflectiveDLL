@@ -46,7 +46,7 @@ static PBYTE rfdll_next_page(PBYTE address)
  * scan that misses would read an unmapped page and raise an access violation
  * instead of returning a clean failure.
  */
-static PRFDLL_META rfdll_find_meta(PBYTE start, DWORD* region_size)
+static PRFDLL_META rfdll_find_meta(PBYTE start, PBYTE* region_limit)
 {
 	PBYTE cursor = NULL;
 	PBYTE end = NULL;
@@ -55,7 +55,7 @@ static PRFDLL_META rfdll_find_meta(PBYTE start, DWORD* region_size)
 	MEMORY_BASIC_INFORMATION memory_info;
 	DWORD scanned = 0;
 
-	*region_size = 0;
+	*region_limit = NULL;
 
 	/*
 	 * VirtualQuery is best effort: when it cannot be resolved or fails, the
@@ -87,7 +87,7 @@ static PRFDLL_META rfdll_find_meta(PBYTE start, DWORD* region_size)
 		{
 			PBYTE region_end = (PBYTE)memory_info.BaseAddress + memory_info.RegionSize;
 
-			*region_size = (DWORD)memory_info.RegionSize;
+			*region_limit = region_end;
 
 			if (region_end > cursor && region_end < end)
 				end = region_end;
@@ -115,10 +115,20 @@ static PRFDLL_META rfdll_find_meta(PBYTE start, DWORD* region_size)
 	return NULL;
 }
 
-/* Validate the metadata and decrypt the image in place. */
-static BOOL rfdll_open_payload(PRFDLL_META meta, PRFDLL_PAYLOAD payload)
+/*
+ * Validate the metadata and decrypt the image in place.
+ *
+ * region_limit is the end of the committed memory that holds the payload, as
+ * reported by VirtualQuery, or NULL when that could not be determined. The
+ * metadata lives inside the payload and is therefore untrusted: without the
+ * limit a corrupt dll_size would make the in place RC4 write past the end of
+ * the buffer. When the limit is unknown the caller has to accept that risk,
+ * which is why the PE headers are still revalidated by rfdll_load_image.
+ */
+static BOOL rfdll_open_payload(PRFDLL_META meta, PRFDLL_PAYLOAD payload, PBYTE region_limit)
 {
 	PBYTE image = NULL;
+	PBYTE payload_end = NULL;
 
 	if (meta->version != RFDLL_META_VERSION)
 		return FALSE;
@@ -134,6 +144,14 @@ static BOOL rfdll_open_payload(PRFDLL_META meta, PRFDLL_PAYLOAD payload)
 
 	/* The key and the image follow the header directly. */
 	image = (PBYTE)meta + RFDLL_META_HEADER_SIZE + meta->key_length;
+	payload_end = image + meta->dll_size;
+
+	/* Reject a payload that would run past the memory that holds it. */
+	if (region_limit != NULL)
+	{
+		if (image < (PBYTE)meta || payload_end > region_limit || payload_end < image)
+			return FALSE;
+	}
 
 	payload->meta = meta;
 	payload->image = image;
@@ -160,19 +178,19 @@ static BOOL rfdll_open_payload(PRFDLL_META meta, PRFDLL_PAYLOAD payload)
 UINT64 entrypoint_packed(void)
 {
 	PBYTE self = NULL;
+	PBYTE region_limit = NULL;
 	PRFDLL_META meta = NULL;
 	RFDLL_PAYLOAD payload;
-	DWORD region_size = 0;
 
 	self = rfdll_get_rip();
 	if (self == NULL)
 		return 0;
 
-	meta = rfdll_find_meta(self, &region_size);
+	meta = rfdll_find_meta(self, &region_limit);
 	if (meta == NULL)
 		return 0;
 
-	if (!rfdll_open_payload(meta, &payload))
+	if (!rfdll_open_payload(meta, &payload, region_limit))
 		return 0;
 
 	return rfdll_load_image(payload.image, payload.image_size);
