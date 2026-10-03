@@ -11,32 +11,49 @@
 ;   RDX = DLL_PROCESS_ATTACH
 ;   R8  = lpReserved (the payload info pointer)
 ;
-; The caller passes the entry point in R9, which the DllMain contract does not
-; use, and the stack pointer the payload's caller had on entry, so this stub can
-; hand the image the same stack the payload itself was given.
+; STATUS: the jump into the image is verified working and the trampoline below is
+; NOT reached. What the code does now is described first, then what is known about
+; the return path and why it is still open.
 ;
-; What is verified: the image is mapped, its CRT resolves imports, DllMain runs to
-; completion, the payload info arrives through both channels, and the payload
-; frees the loader's own region.
+; What is verified: the image maps, its CRT resolves imports, DllMain runs to
+; completion, the payload info arrives through both channels (lpReserved and the
+; copy at image+0x40) and the payload frees the loader's own region.
 ;
-; What is NOT solved: returning from the image to the payload's caller. The reason
-; is concrete and was established from the disassembly of a normally built payload.
-; _DllMainCRTStartup sits at AddressOfEntryPoint, releases its own frame with
-; "add rsp,20h ; pop rdi" and then TAIL-JUMPS into DllMain. It never pushes a
-; return address for DllMain, so DllMain's ret does not read anything this stub
-; controls at the top of the frame; it reads a fixed 0x58 bytes above wherever the
-; entry point was entered (0x40 for DllMain's own frame, 0x18 for the three
-; registers it pops, 8 for the return slot).
+; The return path, and where it stands
+; ------------------------------------
+; The shape of a normally built payload was established by reading its
+; disassembly: _DllMainCRTStartup sits at AddressOfEntryPoint, releases its own
+; frame and tail-jumps into DllMain, so DllMain is entered with exactly the RSP
+; the entry point was handed and its epilogue's ret reads that same slot. So the
+; trampoline has to be stored AT that slot. A "push" cannot do it (push writes to
+; rsp-8 while the entry point is handed the rsp that follows), which is why the
+; store below is a plain store.
 ;
-; Two ways to reach the caller were tried and both are wrong: entering at
-; (caller slot - 0x58) hits the caller's return slot exactly but leaves the entry
-; point 16 byte misaligned, which faults inside ntdll; placing a trampoline at
-; entry + 0x58 keeps the alignment but writes into the caller's live frame. The
-; remaining options all involve either not returning (accept that the payload owns
-; the thread) or having the payload itself arrange the continuation, so this is
-; left as an open item rather than guessed at further.
+; Dumping the live stack at the fault then showed why it still does not work. The
+; frame at the crash reads:
 ;
-; Treat this entry point as "runs the payload and does not come back".
+;   [E+8]  image base          } these four are DllMain's own argument spills,
+;   [E+10] DLL_PROCESS_ATTACH  } which is how E was identified
+;   [E+18] image base + 0x40
+;   [E+20] payload size
+;   [E]    a payload-region address, not the trampoline
+;
+; E is where the shellcode rebuilt the frame, and R9 - from entry_exec.asm - is
+; the RSP the payload entry point was called with. That RSP lives inside the
+; region the host allocated for the payload, so building a frame downward from it
+; writes into payload memory rather than into the caller's stack frame. Whatever
+; lands at [E] is therefore not read back as the caller intended, and DllMain
+; returns to a payload address that has already been wiped.
+;
+; The open question is consequently not a frame size but where the caller's return
+; address actually is relative to what entry_exec.asm can see. Settling it needs
+; evidence from the host side (the stack as case_exec sees it around its call),
+; which has not been done yet.
+;
+; Until then, treat this entry point as "runs the payload and does not come back".
+; The reserved 20h keeps the entry point 8 modulo 16, which is required: reserving
+; only shadow space for a call left it misaligned and the fault surfaced much later
+; inside ntdll on a movaps during import resolution, far from this code.
 ;
 ; Assemble with: ml64 /c /Fo:tail_jump.obj tail_jump.asm
 
@@ -47,18 +64,12 @@ PUBLIC rfdll_tail_jump
 ;   RCX = image base
 ;   RDX = lpReserved
 ;   R8  = entry point inside the mapped image
-;   R9  = the address of the return address the payload's caller pushed
+;   R9  = the stack pointer the payload entry point was called with
 rfdll_tail_jump PROC
-    ; Back to the stack the payload's caller left behind. R9 is 8 modulo 16, and
-    ; the 28h reserved below keeps the entry point there: 20h is the shadow space
-    ; the ABI requires at a call site and the extra 8 keeps a callee's expectation
-    ; of 8 modulo 16. Reserving only 20h left it 16 byte misaligned, and that fault
-    ; surfaced much later inside ntdll on a movaps during import resolution rather
-    ; than anywhere near this code.
     mov     rsp, r9
+    sub     rsp, 20h
     lea     rax, rfdll_tail_return
-    push    rax
-    sub     rsp, 28h
+    mov     qword ptr [rsp], rax
 
     ; Fill in the DllMain arguments. R8 holds the entry point, so move it out of
     ; the way first. RSP is not touched again before the jump.
@@ -67,9 +78,8 @@ rfdll_tail_jump PROC
     mov     rdx, 1                  ; rdx = DLL_PROCESS_ATTACH
     jmp     r9                      ; rcx is already the image base
 
-; Intended landing point for the return path, kept so the frame has a return
-; address. Never reached with the current image entry point; see the note at the
-; top of this file for why.
+; Intended landing point for the return path; never reached today. See the note at
+; the top of this file.
 rfdll_tail_return:
     ret
 rfdll_tail_jump ENDP

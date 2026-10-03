@@ -84,16 +84,26 @@ does not work yet. Everything up to and including the jump is verified: the
 metadata is found, the image runs, the info arrives through both channels, and
 the payload frees the loader's own region (`payload_free ok` in the marker log).
 
-The cause is specific: a normally built MSVC payload has
-`_DllMainCRTStartup` at `AddressOfEntryPoint`, and that function does not return
-through the address it was entered with. It releases its own frame
-(`add rsp,20h` / `pop rdi`) and then **tail-jumps into `DllMain`**, so the final
-`ret` never reaches the trampoline the tail jump pushed. A payload whose entry
-point is a plain function that returns normally would take that path.
+Two facts about the return path were established from evidence rather than
+guessed at, and both are recorded in `tail_jump.asm`:
 
-So the entry point should be treated as "runs the payload and does not come back"
-for now, and test case 7 is opt-in for that reason. This is the one part of Batch
-2c that is not finished.
+* a normally built MSVC payload has `_DllMainCRTStartup` at
+  `AddressOfEntryPoint`, and that function releases its own frame and then
+  **tail-jumps into `DllMain`**. `DllMain` is therefore entered with exactly the
+  stack pointer the entry point was handed, and its epilogue's `ret` reads that
+  same slot;
+* dumping the live stack at the fault showed that the slot the trampoline is
+  stored in is **inside the region the host allocated for the payload**, not in
+  the caller's frame. `entry_exec.asm` can only see the stack pointer the payload
+  was called with, and building a frame downward from it writes into payload
+  memory. `DllMain` therefore returns to a payload address that the wipe has
+  already destroyed.
+
+So the open question is not a frame size but where the caller's return address
+actually is relative to what the entry point can observe. Settling it needs
+evidence gathered from the host side, around its call to the payload, which has
+not been done yet. Until then the entry point should be treated as "runs the
+payload and does not come back", and test case 7 is opt-in for that reason.
 
 ## Interface
 
