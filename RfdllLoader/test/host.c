@@ -32,6 +32,9 @@
 
 typedef unsigned long long (*rfdll_entry)(void* image, unsigned long long size);
 
+/* Provided by capture_rsp.asm: the caller's stack pointer at the call site. */
+extern void* capture_rsp(void);
+
 static int g_checks = 0;
 static int g_failures = 0;
 
@@ -736,9 +739,25 @@ static void case_exec(const unsigned char* payload, unsigned long payload_size,
 	 * logs what it managed to do before the return path is taken, and the
 	 * process may then fault. What matters is that the log shows the whole chain
 	 * up to the jump succeeding.
+	 *
+	 * The stack pointer is captured around the call so the return path can be
+	 * reasoned about from the host's own frame rather than from the payload's
+	 * view of it, which is what the entry point can see and what made earlier
+	 * attempts guess.
 	 */
 	printf("  [*] entering the payload\n");
-	entry(NULL, 0);
+	{
+		void* stack_before = capture_rsp();
+
+		/*
+		 * Printed before the call so the value survives even though the payload
+		 * does not return yet.
+		 */
+		printf("  [*] host rsp at the call site: %p\n", stack_before);
+		fflush(stdout);
+
+		entry(NULL, 0);
+	}
 	printf("  [*] control came back to the host\n");
 
 	logged = file_value("target_marker.log", "image_base");
