@@ -253,6 +253,11 @@ static void rfdll_exec_info_hook(PBYTE image_base, DWORD image_size, PVOID conte
 	destination->flags = source->flags;
 }
 
+/*
+ * The real work, entered from entry_exec.asm with the stack pointer of the
+ * payload's caller. Not static because that assembly entry jumps to it by name,
+ * and it is the only caller: nothing else should run this.
+ */
 void rfdll_exec_run(PBYTE caller_stack)
 {
 	PBYTE self = NULL;
@@ -376,11 +381,11 @@ void rfdll_exec_run(PBYTE caller_stack)
 
 	/*
 	 * caller_stack is the stack pointer the payload's caller had at its call,
-	 * captured in entrypoint_exec before any frame existed. Restoring it makes
-	 * the image entry point run exactly where entrypoint_exec would have: the
-	 * DLL's frame goes below it and its ret consumes the caller's return
-	 * address, so control returns to whoever called the payload while nothing
-	 * in the payload is left on the stack.
+	 * read by entry_exec.asm before any frame existed. Restoring it makes the
+	 * image entry point run exactly where this function would have: the DLL's
+	 * frame goes below it and its ret consumes the caller's return address, so
+	 * control returns to whoever called the payload while nothing in the payload
+	 * is left on the stack.
 	 */
 	rfdll_tail_jump(image_base, (PVOID)(image_base + RFDLL_PAYLOAD_INFO_OFFSET),
 		image_base + entry_rva, caller_stack);

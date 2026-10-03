@@ -80,12 +80,20 @@ it can only do because the loader tells it where the region is and how big it
 is. `test/target_dll.c` does exactly that and logs `payload_free ok`.
 
 **Known incomplete:** returning from the image entry point back to the caller
-does not work yet. Everything up to and including the jump is verified (the
+does not work yet. Everything up to and including the jump is verified: the
 metadata is found, the image runs, the info arrives through both channels, and
-the payload frees the loader's region), but the return path faults afterwards,
-so the case is opt-in in the test and the entry point should be treated as
-"runs the payload and does not come back" for now. This is the one part of the
-design that is not finished.
+the payload frees the loader's own region (`payload_free ok` in the marker log).
+
+The cause is specific: a normally built MSVC payload has
+`_DllMainCRTStartup` at `AddressOfEntryPoint`, and that function does not return
+through the address it was entered with. It releases its own frame
+(`add rsp,20h` / `pop rdi`) and then **tail-jumps into `DllMain`**, so the final
+`ret` never reaches the trampoline the tail jump pushed. A payload whose entry
+point is a plain function that returns normally would take that path.
+
+So the entry point should be treated as "runs the payload and does not come back"
+for now, and test case 7 is opt-in for that reason. This is the one part of Batch
+2c that is not finished.
 
 ## Interface
 
