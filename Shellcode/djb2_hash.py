@@ -36,6 +36,7 @@ names = [
     "GetProcAddress",
     "VirtualAlloc",
     "VirtualFree",
+    "VirtualProtect",
 
     "WinHttpOpen",
     "WinHttpConnect",
@@ -47,6 +48,7 @@ names = [
     "WinHttpQueryHeaders",
     
     "RtlAddFunctionTable",
+    "RtlDeleteFunctionTable",
     "LoadLibraryExA",
     "GetProcessId",
     "AddVectoredExceptionHandler",

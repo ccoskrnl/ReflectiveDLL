@@ -1,0 +1,10 @@
+# Build outputs of the loader shellcode (build.cmd + objcopy).
+# *.obj, *.pdb, *.ilk and *.log are already covered by the repository .gitignore.
+loader.bin
+loader.exe
+
+# Build outputs of the end to end test (test/build_test.cmd).
+test/*.dll
+test/*.exe
+test/*.lib
+test/*.exp
