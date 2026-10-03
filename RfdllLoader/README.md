@@ -46,7 +46,9 @@ endian for the multi byte fields):
    where `pack.py` puts the header;
 3. validate version, flags, `dll_size` and `key_length`, and refuse a metadata
    whose key plus image would run past the region found in step 2 (the metadata
-   is inside the payload, so those fields are untrusted input);
+   is inside the payload, so those fields are untrusted input). A payload whose
+   region limit could not be determined at all is refused as well, rather than
+   decrypting without a bound;
 4. RC4 the image **in place** at `data_offset`. RC4 is a stream cipher, so this
    is the same operation as encryption; the payload must therefore be writable,
    and the caller gives up its copy of the ciphertext;
@@ -166,7 +168,7 @@ UINT64 image_base = ((rfdll_entry)loader_entry)(dll_image, dll_image_size);
 | File | Note |
 | --- | --- |
 | `framework.h` | copied as is |
-| `headers.h` | copied as is, contents identical (PEB / LDR / NT structures and function pointer types); the original's UTF-8 BOM was dropped so that every file here is pure ASCII |
+| `headers.h` | copied as is, contents identical (PEB / LDR / NT structures and function pointer types); the original's UTF-8 BOM was dropped so that every file here is pure ASCII. `fnVirtualQuery` was added next to the other kernel32 function pointer types for the packed entry point |
 | `ldr.c` / `ldr.h` | copied; only the comments were translated into English (`GMHR_Hash` resolves a module base by name hash, `GPAR_Hash` resolves an export by name hash) |
 | `misc.c` / `misc.h` | copied as is (self-contained string routines) |
 | `get_peb.asm` | copied; only the comments were translated into English (`gs:[60h]` reads the PEB) |
@@ -180,7 +182,7 @@ cipher), `get_rip.asm` (RIP anchor for the argument-less entry point),
 
 ## End to end test
 
-`test/` holds a self contained test of the loader (five cases, 56 checks when a
+`test/` holds a self contained test of the loader (six cases, 58 checks when a
 packed payload is supplied). Build it from a VS developer command prompt, after
 `build.cmd` produced `loader.bin`:
 
@@ -216,6 +218,7 @@ host.exe ..\loader.bin target.dll fail.dll packtest_b2b\payload.bin
 | 3 - load `target.dll` with `AddressOfEntryPoint` zeroed | the exact per section page protection the loader applies, because no payload code runs; also covers the "an image without an entry point is accepted" path |
 | 4 - load `fail.dll` with its entry point RVA outside the image | the loader treats the image as malformed: it returns 0, releases the TLS callbacks with `DLL_PROCESS_DETACH`, never calls the entry point, and frees the image |
 | 5 - packed payload, entry called with **no** arguments | the packed entry finds its own metadata, decrypts the image in place and maps it: the 64 bit region bound, the RC4 step and the metadata layout all work together, and the resulting image passes the same relocation / protection / export / TLS checks as case 1 |
+| 6 - packed payload with `dll_size` patched past the buffer | the metadata is untrusted input and the in place decrypt happens before the PE is validated, so the loader has to refuse it: it returns 0 without writing outside the payload |
 
 Behaviour the test pins down:
 
