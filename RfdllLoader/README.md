@@ -23,6 +23,20 @@ image.
 +...                 rc4(PE image)        dll_size bytes
 ```
 
+`pack.py` carries the full usage guide in its module docstring: which of the three
+blobs to pack and when, the key options, what the packer strips from the DLL, what
+the loaded DLL sees, and the caveats that matter in practice (the entry point not
+returning, the payload having to stay writable, the key travelling in the payload,
+and what a code integrity policy does to all of this). Read it with:
+
+```
+python pack.py --help
+python -c "import pack; help(pack)"
+```
+
+The rest of this section covers the same format from the loader's side. If the two
+ever disagree, `pack.py` and the code are authoritative and this file is stale.
+
 The metadata is laid out exactly as in `payload.h` (packed, 19 bytes, little
 endian for the multi byte fields):
 

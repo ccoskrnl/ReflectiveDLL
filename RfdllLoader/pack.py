@@ -2,8 +2,70 @@
 """
 Payload packer for the RfdllLoader reflective loader shellcode.
 
-Payload layout (what the injector carries and writes into the target):
+This script is the user facing part of the project: it turns a built loader blob
+plus a DLL into the single buffer an injector carries into the target. Everything
+below is meant to be enough to use the loader correctly without reading the C.
 
+
+WHICH LOADER TO PACK
+--------------------
+build.cmd produces three blobs. They are not interchangeable; pick the one that
+matches how you want the payload to behave.
+
+  loader.bin          The plain loader. NOT packed by this script. The caller
+                      passes the raw DLL bytes itself, so it must have the DLL
+                      somewhere already:
+                          RCX = address of the raw PE bytes (on-disk layout)
+                          RDX = size of that buffer
+                          RAX = mapped image base, or 0 on failure
+                      Use pack.py --loader with one of the two below instead
+                      unless you are writing your own carrier.
+
+  loader_packed.bin   Self contained and RETURNS. The payload finds its own
+                      metadata, decrypts the DLL in place and maps it. It gives
+                      the image base back to the caller in RAX and leaves the
+                      payload region alone: your code still owns it and must
+                      release it.
+                      This is the right choice when the caller wants to keep
+                      running afterwards.
+
+  loader_exec.bin     Self contained and TAKES THE THREAD OVER. Same as above,
+                      except it wipes the payload (decrypted image, RC4 key and
+                      metadata), writes the payload info into the image and then
+                      jumps into the image entry point instead of calling it.
+                      It never returns, and the loaded DLL frees the payload
+                      region, not you.
+                      This is the right choice for a real payload: nothing
+                      readable is left behind and no return address into the
+                      payload sits on the stack.
+
+
+BASIC USAGE
+-----------
+  python pack.py --dll payload.dll --loader loader.bin --out payload.bin
+
+  python pack.py --dll payload.dll --loader loader_exec.bin ^
+      --out payload.bin --info payload_info.json
+
+Then carry payload.bin into the target and start executing at byte 0. The two
+packed blobs take no arguments, which is the point of the format: everything the
+loader needs travels inside the buffer.
+
+Typical key handling:
+
+  --seed <int>        Deterministic key. For tests and reproductions only.
+  (nothing)           A random key from the OS. This is the normal case.
+  --key <hex>         You supply the key. Avoid on a shared shell: it ends up in
+                      the process list and the history file.
+  --no-rc4            No encryption at all. Debugging only, see the caveats.
+
+Read the packer report: it prints where the metadata, key and ciphertext sit, and
+which parts of the PE were stripped. payload_info.json holds the same plus
+sha256 sums of the input DLL, the stripped DLL and the final payload.
+
+
+PAYLOAD LAYOUT
+--------------
     offset 0                     loader.bin (position independent loader code)
     pad up to a page boundary    0xCC filler, so loader code and metadata never
                                  share a page (the injector can give the code
@@ -20,16 +82,140 @@ Payload layout (what the injector carries and writes into the target):
                                  rc4(dll)    dll_size
 
 The DLL is RC4 encrypted. RC4 is a stream cipher, so decryption is the same
-operation as encryption. The loader decrypts in place in the payload area, maps
-the image, wipes the decrypted data and the key, and then hands the payload area
-to the loaded DLL so it can release it.
+operation as encryption. The loader decrypts in place in the payload area.
 
 Nothing here is strong cryptography: the point of the RC4 layer is that the
 payload carries no readable PE image and no readable import/export strings, and
 that each build differs. The loader itself stays plaintext, it has to be
 executable.
 
-Usage:
+
+WHAT GETS STRIPPED FROM THE DLL
+-------------------------------
+By default the packer removes what a self mapping loader does not need and what
+makes a payload easy to recognise: the DOS stub body, the Rich header, linker
+version fields, the timestamp, the checksum, the debug directory and its PDB
+path, the resource directory and .rsrc data, the load config directory, bound and
+delay import descriptors, and the section names (renamed to plain .text/.data/
+.rdata/.reloc by their characteristics).
+
+It deliberately keeps the image a syntactically valid PE: MZ and e_lfanew, the PE
+signature, the file header, the essential optional header fields, and the
+basereloc / import / TLS / exception directories plus the section table with its
+raw offsets. ntdll and the CRT read those.
+
+The freed DOS stub area is not only for looks: loader_exec.bin writes the
+payload info block at offset 0x40 inside the mapped image. --no-strip therefore
+also disables that channel, since the stub bytes would still be there.
+
+
+WHAT THE LOADED DLL SEES
+------------------------
+The DLL is entered as DllMain(image_base, DLL_PROCESS_ATTACH, lp_reserved), the
+way a normally loaded DLL would be.
+
+When packed with loader_exec.bin, lp_reserved points at an RFDLL_PAYLOAD_INFO
+structure, and the same structure is also copied to a fixed offset (0x40) inside
+the mapped image. Both are provided because a DllMain reached through the CRT's
+_DllMainCRTStartup is free to pass something other than the loader's pointer as
+lp_reserved; the in-image copy is always reachable from the image base. The
+layout is in payload.h, and test/target_dll.c shows a DLL using it.
+
+Its fields: magic, version, the payload region base and size, the image base and
+size, host_hash, and flags. The flags tell the DLL to do two things:
+
+  FREE_BY_DLL            Release the payload region with VirtualFree(payload_base,
+                         0, MEM_RELEASE). loader_exec.bin wiped it and cannot
+                         free it itself, because it is executing from that region
+                         when it jumps away.
+  PAYLOAD_OWNS_THREAD    The entry point does not return; see the caveats.
+
+A DLL that needs this information later must copy the structure first, because the
+memory it lives in is about to be released.
+
+
+CAVEATS
+-------
+Not returning. loader_exec.bin never gives the thread back, and that is a
+property of a normal MSVC DLL rather than a limitation that can be worked around:
+the CRT's _DllMainCRTStartup sits at AddressOfEntryPoint, releases its own frame
+and then TAIL-JUMPS into DllMain, so the ret that ends DllMain does not go back
+through the address the entry point was given. A trampoline placed there is never
+used. A payload that simply returns from DllMain therefore runs into a frame that
+is no longer its own and faults. Yours should block the thread, or start a thread
+of its own and then block, and never fall off the end of DllMain. This was
+confirmed with a diagnostic payload whose entry point is a plain function ending
+in a real ret: control came back normally with that one, which is how we know the
+trampoline is sound and the CRT's shape is what differs.
+
+Writable payload. The entry point decrypts in place, so the buffer must be
+writable when execution starts. Mapped read-only, the loader faults instead of
+failing cleanly. Something like PAGE_EXECUTE_READWRITE for the initial write,
+then RX for the code and RW for the rest once you know where the metadata is.
+
+The RC4 key travels in the payload. It sits right next to the ciphertext, so the
+ciphertext is only as secret as the payload itself. This hides the DLL from a
+plaintext scan of the buffer, and nothing more. If you need the payload to be
+meaningful only to whoever has a secret, this is not that mechanism.
+
+Anti-cheat / ACG. Code integrity and arbitrary code guard block this loader, as
+they block any self mapping loader: the image is never a real mapped module. Do
+not expect it to help there.
+
+The image is not a module. It is not linked into the PEB module lists, so
+GetModuleHandle / GetProcAddress on it fail, it shows up in no module enumeration,
+and the loader does not register it anywhere. Resolve your own exports by walking
+the export table if you need them.
+
+Delay loaded imports are ignored, bound imports (an OriginalFirstThunk of 0 whose
+IAT already holds VAs) are unsupported, and SizeOfOptionalHeader must be exactly
+240. The packer rejects a DLL that violates the last one instead of producing a
+payload that fails at run time.
+
+Protection is page granular, so the gaps between sections keep the initial
+protection, and a failed VirtualProtect is not treated as fatal.
+
+FlushInstructionCache is not called, and no CFG registration is made for the
+image.
+
+Observe the size limits. The loader accepts a DLL up to 2 GB, but it scans forward
+from its own code for the metadata and stops at the end of the committed region,
+so the whole payload has to live in one allocation. Do not split the loader code
+and the metadata across two mappings.
+
+
+EXAMPLES
+--------
+A payload that maps a DLL and lets you keep running (caller owns the region):
+
+  build.cmd
+  python pack.py --dll beacon.dll --loader loader_packed.bin --out packed.bin
+
+A payload that takes the thread, wipes everything and lets the DLL free it:
+
+  python pack.py --dll beacon.dll --loader loader_exec.bin ^
+      --out exec.bin --info exec_info.json
+
+Reproducible build for a test or a bug report:
+
+  python pack.py --dll target.dll --loader loader_exec.bin --out t.bin --seed 1
+
+Plaintext payload when you need to see the PE in a dump while debugging:
+
+  python pack.py --dll target.dll --loader loader_exec.bin --out t.bin --no-rc4
+
+Keeping a resource section that the DLL actually needs at run time:
+
+  python pack.py --dll target.dll --loader loader_exec.bin --out t.bin ^
+      --keep-resource
+
+Run the self tests after a build; they pin all of this down:
+
+  python test/test_pack.py
+
+
+CLI
+---
     pack.py --dll payload.dll [--loader loader.bin] [--key <hex> | --seed <int>]
             [--out payload.bin] [--info payload_info.json] [--keep-resource]
             [--keep-debug] [--keep-loadconfig] [--no-strip] [--no-rc4]
