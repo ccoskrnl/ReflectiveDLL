@@ -143,6 +143,7 @@
     <ClCompile Include="ldr.c" />
     <ClCompile Include="misc.c" />
     <ClCompile Include="pe_loader.c" />
+    <ClCompile Include="rc4.c" />
     <ClCompile Include="loader.c" />
   </ItemGroup>
   <ItemGroup>
@@ -152,10 +153,17 @@
     <ClInclude Include="ldr.h" />
     <ClInclude Include="misc.h" />
     <ClInclude Include="pe_loader.h" />
+    <ClInclude Include="rc4.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="build.cmd" />
+    <None Include="pack.py" />
     <MASM Include="get_peb.asm">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <FileType>Document</FileType>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </MASM>
+    <MASM Include="get_rip.asm">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <FileType>Document</FileType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
