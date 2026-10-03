@@ -57,6 +57,36 @@ endian for the multi byte fields):
 The image is decrypted where it lies, so the mapped image never contains the
 loader, and the header page is read-only once mapping is done.
 
+## Executing payload (incomplete)
+
+`loader_exec.bin` is a third shape, packed the same way as `loader_packed.bin`
+but entered with `entrypoint_exec`. It does everything the packed entry point
+does, and then:
+
+1. maps the image from a **private copy** of the decrypted PE, because the
+   payload is about to be destroyed and the image cannot be mapped from bytes
+   that are being wiped;
+2. **wipes the payload**: the decrypted image, the RC4 key and the metadata. The
+   loader code itself is left alone because it is still executing;
+3. writes `RFDLL_PAYLOAD_INFO` (see `payload.h`) at offset `0x40` inside the
+   mapped image, through the `rfdll_prepare_hook` callback so it happens before
+   the header page is made read-only;
+4. passes the same structure as `lpReserved` and jumps into the image entry
+   point instead of calling it, so no return address into the wiped payload is
+   left on the stack.
+
+The payload reads that structure and releases the payload region itself, which
+it can only do because the loader tells it where the region is and how big it
+is. `test/target_dll.c` does exactly that and logs `payload_free ok`.
+
+**Known incomplete:** returning from the image entry point back to the caller
+does not work yet. Everything up to and including the jump is verified (the
+metadata is found, the image runs, the info arrives through both channels, and
+the payload frees the loader's region), but the return path faults afterwards,
+so the case is opt-in in the test and the entry point should be treated as
+"runs the payload and does not come back" for now. This is the one part of the
+design that is not finished.
+
 ## Interface
 
 The build product is `loader.bin`, a pure `.text` blob that starts executing at
@@ -132,12 +162,15 @@ Output:
 * `loader.bin`: the shellcode for the two argument form
   (`objcopy -O binary -j .text loader.exe loader.bin`);
 * `loader_packed.bin`: the shellcode for the packed form
-  (`objcopy -O binary -j .text loader_packed.exe loader_packed.bin`).
+  (`objcopy -O binary -j .text loader_packed.exe loader_packed.bin`);
+* `loader_exec.bin`: the shellcode for the executing form
+  (`objcopy -O binary -j .text loader_exec.exe loader_exec.bin`).
 
-`entrypoint` and `entrypoint_packed` each have to be the first function of
-`.text`, so the two blobs are linked separately: `loader.c` and
-`loader_packed.c` contain one function each and their object file is listed
-first on its link line. Offset 0 of each blob is therefore its entry point.
+`entrypoint`, `entrypoint_packed` and `entrypoint_exec` each have to be the
+first function of `.text`, so the three blobs are linked separately: `loader.c`,
+`loader_packed.c` and `entry_exec.asm` contain one entry each and their object
+file is listed first on its link line. Offset 0 of each blob is therefore its
+entry point.
 
 ## How to call it
 

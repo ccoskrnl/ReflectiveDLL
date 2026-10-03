@@ -505,7 +505,8 @@ static void rfdll_unload_image(PBYTE base, fnVirtualFree virtual_free,
  * with VirtualFree; on failure everything applied here is already undone.
  */
 PBYTE rfdll_prepare_image(PVOID image, UINT64 image_size, DWORD* entry_rva,
-	DWORD* out_size, BOOL* needs_delete_table)
+	DWORD* out_size, BOOL* needs_delete_table,
+	rfdll_prepare_hook hook, PVOID hook_context)
 {
 	PIMAGE_DOS_HEADER dos_header = NULL;
 	PIMAGE_NT_HEADERS64 nt_header = NULL;
@@ -659,7 +660,16 @@ PBYTE rfdll_prepare_image(PVOID image, UINT64 image_size, DWORD* entry_rva,
 	/* ---------- 8. TLS callbacks ---------- */
 	rfdll_call_tls_callbacks(base, nt_header, DLL_PROCESS_ATTACH);
 
-	/* ---------- 9. per-section page protection ---------- */
+	/*
+	 * ---------- 9. caller hook ----------
+	 * Runs after the image is fully set up but before the page protections
+	 * below lock the header page down, which is the only window in which the
+	 * caller can still write into the image's own header area.
+	 */
+	if (hook != NULL)
+		hook(base, size_of_image, hook_context);
+
+	/* ---------- 10. per-section page protection ---------- */
 	rfdll_protect_sections(base, nt_header, virtual_protect);
 
 	if (out_size != NULL)
@@ -679,7 +689,8 @@ UINT64 rfdll_load_image(PVOID image, UINT64 image_size)
 	fnVirtualFree virtual_free = NULL;
 	fnRtlDeleteFunctionTable delete_function_table = NULL;
 
-	base = rfdll_prepare_image(image, image_size, &entry_point_rva, &size_of_image, &registered);
+	base = rfdll_prepare_image(image, image_size, &entry_point_rva, &size_of_image, &registered,
+		NULL, NULL);
 	if (base == NULL)
 		return 0;
 

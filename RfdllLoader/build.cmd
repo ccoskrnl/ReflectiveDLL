@@ -23,6 +23,7 @@ cl %CFLAGS% /Fo:ldr.obj ldr.c || exit /b 1
 ml64.exe  /Fo get_peb.obj /c get_peb.asm || exit /b 1
 ml64.exe  /Fo get_rip.obj /c get_rip.asm || exit /b 1
 ml64.exe  /Fo tail_jump.obj /c tail_jump.asm || exit /b 1
+ml64.exe  /Fo entry_exec.obj /c entry_exec.asm || exit /b 1
 
 set COMMON=pe_loader.obj rc4.obj misc.obj ldr.obj get_peb.obj get_rip.obj
 
@@ -36,7 +37,7 @@ if errorlevel 1 exit /b 1
 objcopy -O binary -j .text loader_packed.exe loader_packed.bin
 if errorlevel 1 exit /b 1
 
-link /SUBSYSTEM:WINDOWS /ENTRY:entrypoint_exec /NODEFAULTLIB /DYNAMICBASE:NO /NXCOMPAT:NO /ALIGN:16 /OUT:loader_exec.exe loader_exec.obj %COMMON% tail_jump.obj
+link /SUBSYSTEM:WINDOWS /ENTRY:entrypoint_exec /NODEFAULTLIB /DYNAMICBASE:NO /NXCOMPAT:NO /ALIGN:16 /OUT:loader_exec.exe entry_exec.obj loader_exec.obj %COMMON% tail_jump.obj
 if errorlevel 1 exit /b 1
 objcopy -O binary -j .text loader_exec.exe loader_exec.bin
 if errorlevel 1 exit /b 1

@@ -6,6 +6,7 @@
 
 .code
 PUBLIC rfdll_get_rip
+PUBLIC rfdll_get_rsp
 
 ; void* rfdll_get_rip(void);
 rfdll_get_rip PROC
@@ -14,5 +15,16 @@ rfdll_get_rip_here:
     pop     rax                 ; rax = address of the pop, inside the loader
     ret
 rfdll_get_rip ENDP
+
+; void* rfdll_get_rsp(void);
+; Returns the stack pointer of whoever called this function, i.e. the address of
+; the return address that call pushed. Reading it here rather than inside the C
+; function matters: by the time a C function body runs, its prologue has already
+; moved RSP by an amount only the compiler knows.
+rfdll_get_rsp PROC
+    mov     rax, rsp
+    add     rax, 8              ; the slot above this function's return address
+    ret
+rfdll_get_rsp ENDP
 
 END

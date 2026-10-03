@@ -91,6 +91,16 @@ typedef struct _RFDLL_PAYLOAD
 #define RFDLL_PAYLOAD_INFO_MAGIC   0x494c4652    /* "RFLI" of "RFLINFO" */
 #define RFDLL_PAYLOAD_INFO_VERSION 1
 
+/*
+ * info.flags value that tells the payload to release the payload region.
+ *
+ * Only the executing entry point sets it: that entry point wipes the payload
+ * and cannot free it, because it is still running from that region when it
+ * jumps away. The plain packed entry point keeps ownership of the payload, so
+ * its payloads must not free anything and the flag stays clear.
+ */
+#define RFDLL_PAYLOAD_FLAG_FREE_BY_DLL  0x00000001
+
 /* Where the copy lives inside the mapped image (inside the DOS stub area). */
 #define RFDLL_PAYLOAD_INFO_OFFSET  0x40
 #define RFDLL_PAYLOAD_INFO_SIZE    64
@@ -107,7 +117,7 @@ typedef struct _RFDLL_PAYLOAD_INFO
 	                        receives as its first argument)                   */
 	SIZE_T image_size;   /* SizeOfImage of that mapping                       */
 	DWORD host_hash;     /* the metadata's host_hash, currently unused        */
-	DWORD flags;         /* reserved, 0                                       */
+	DWORD flags;         /* RFDLL_PAYLOAD_FLAG_*                              */
 } RFDLL_PAYLOAD_INFO, *PRFDLL_PAYLOAD_INFO;
 #pragma pack(pop)
 
@@ -119,8 +129,29 @@ UINT64 entrypoint_packed(void);
  * it maps the image, wipes the payload, then jumps into the image entry point
  * so no return address into the payload is left on the stack.
  *
+ * It is written in assembly (entry_exec.asm) so the caller's stack pointer can
+ * be read before any frame exists, and it is the first object on the link line
+ * so that it sits at offset 0 of loader_exec.bin.
+ *
  * Because it does not return, it cannot report a failure to its caller either:
- * a failure ends in the loader branch restoring the stack and returning to
- * whatever called the payload.
+ * a failure ends with the C part returning, and the assembly entry then returns
+ * to the caller.
  */
 void entrypoint_exec(void);
+
+/*
+ * The C part, called by entry_exec.asm with the stack pointer of the payload's
+ * caller. Not meant to be called from anywhere else.
+ */
+void rfdll_exec_run(PBYTE caller_stack);
+
+/*
+ * Provided by tail_jump.asm. Enters the image entry point and never returns.
+ *
+ * caller_stack is the stack pointer the payload's caller had at its call, which
+ * is where the image entry point runs from. Restoring it means the DLL's own
+ * frame is the only thing on the stack and its return goes back to whoever
+ * called the payload. The value is passed in rather than assumed because the
+ * compiler decides the frame size.
+ */
+void rfdll_tail_jump(void* image_base, void* lp_reserved, void* entry, void* caller_stack);

@@ -690,23 +690,95 @@ static void case_packed_bad_size(const unsigned char* payload, unsigned long pay
 	VirtualFree(payload_mem, 0, MEM_RELEASE);
 }
 
+/*
+ * Case 7: the executing entry point.
+ *
+ * KNOWN INCOMPLETE: the return path out of the image is not solved yet. Verified
+ * here is everything up to and including the jump into the image: the metadata
+ * is found, the image is mapped, the payload info reaches DllMain (both through
+ * lpReserved and through the fixed in-image copy) and the payload releases its
+ * own region. Returning from DllMain back to the caller does not work yet, so
+ * this case runs only when asked for explicitly: letting it take the whole suite
+ * down would hide the cases that do pass.
+ *
+ * Progress is reported through target_marker.log, which the payload writes
+ * before the return path is entered.
+ */
+static void case_exec(const unsigned char* payload, unsigned long payload_size,
+	const unsigned char* dll_file)
+{
+	void* payload_mem = NULL;
+	rfdll_entry entry = NULL;
+	unsigned long long payload_base = 0;
+	unsigned long long logged = 0;
+	unsigned long long logged_payload = 0;
+	unsigned long long logged_size = 0;
+
+	printf("\n=== case 7: executing entry point (wipes the payload, then jumps) ===\n");
+	truncate_file("target_marker.log");
+	occupy_preferred_base(dll_file);
+
+	payload_mem = VirtualAlloc(NULL, payload_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	if (payload_mem == NULL)
+	{
+		check(0, "host could allocate memory for the executing payload");
+		return;
+	}
+	memcpy(payload_mem, payload, payload_size);
+	FlushInstructionCache(GetCurrentProcess(), payload_mem, payload_size);
+	payload_base = (unsigned long long)(ULONG_PTR)payload_mem;
+	printf("  [*] payload: %lu bytes at 0x%llx\n", payload_size, payload_base);
+
+	entry = (rfdll_entry)payload_mem;
+
+	/*
+	 * The call is not expected to come back with the current code: the payload
+	 * logs what it managed to do before the return path is taken, and the
+	 * process may then fault. What matters is that the log shows the whole chain
+	 * up to the jump succeeding.
+	 */
+	printf("  [*] entering the payload\n");
+	entry(NULL, 0);
+	printf("  [*] control came back to the host\n");
+
+	logged = file_value("target_marker.log", "image_base");
+	logged_payload = file_value("target_marker.log", "payload_base");
+	logged_size = file_value("target_marker.log", "payload_size");
+
+	printf("  [*] image base   logged by the payload: 0x%llx\n", logged);
+	printf("  [*] payload base logged by the payload: 0x%llx\n", logged_payload);
+	printf("  [*] payload size logged by the payload: 0x%llx\n", logged_size);
+
+	check(logged != 0, "DllMain ran on the mapped image");
+	check(logged_payload == payload_base, "DllMain was told the real payload base");
+	check(logged_size >= payload_size, "DllMain was told a payload size covering the payload");
+	check(query_state((const void*)(ULONG_PTR)payload_base) == MEM_FREE,
+		"the payload released its own region");
+	check(file_value("target_marker.log", "dll_attach") != 0,
+		"DllMain saw DLL_PROCESS_ATTACH in the executing image");
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* loader_bytes = NULL;
 	unsigned char* target_bytes = NULL;
 	unsigned char* fail_bytes = NULL;
 	unsigned char* payload_bytes = NULL;
+	unsigned char* exec_bytes = NULL;
 	unsigned long loader_size = 0;
 	unsigned long target_size = 0;
 	unsigned long fail_size = 0;
 	unsigned long payload_size = 0;
+	unsigned long exec_size = 0;
 	void* loader_mem = NULL;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	if (argc < 4)
 	{
-		printf("usage: %s <loader.bin> <target.dll> <fail.dll> [payload.bin]\n", argv[0]);
+		printf("usage: %s <loader.bin> <target.dll> <fail.dll> [payload.bin] [exec_payload.bin] [run]\n", argv[0]);
+		printf("  case 5 and 6 need payload.bin; case 7 additionally needs exec_payload.bin\n");
+		printf("  and the word run, because its return path is still incomplete\n");
 		return 2;
 	}
 
@@ -753,6 +825,31 @@ int main(int argc, char** argv)
 	else
 	{
 		printf("\n=== case 5: packed payload skipped (no payload.bin argument) ===\n");
+	}
+
+	/*
+	 * The executing payload is a separate packer run, because it uses
+	 * loader_exec.bin instead of loader_packed.bin.
+	 *
+	 * It runs only on explicit request (a 7th argument): the return path out of
+	 * the image is still unsolved, so this case is expected to fault after the
+	 * payload has done its work. Letting it run by default would take the whole
+	 * suite down and hide the cases that pass.
+	 */
+	if (argc >= 7)
+	{
+		exec_bytes = read_file(argv[5], &exec_size);
+		if (exec_bytes == NULL)
+		{
+			printf("[FAIL] cannot read %s\n", argv[5]);
+			return 2;
+		}
+		case_exec(exec_bytes, exec_size, target_bytes);
+		free(exec_bytes);
+	}
+	else
+	{
+		printf("\n=== case 7: executing entry point skipped (still incomplete, pass a 7th argument to run it) ===\n");
 	}
 
 	free(loader_bytes);
