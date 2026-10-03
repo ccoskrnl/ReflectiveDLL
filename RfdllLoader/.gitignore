@@ -8,3 +8,6 @@ test/*.dll
 test/*.exe
 test/*.lib
 test/*.exp
+
+# Scratch directory of test/test_pack.py.
+test/packtest_scratch/
