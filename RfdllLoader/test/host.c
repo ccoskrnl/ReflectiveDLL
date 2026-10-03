@@ -606,6 +606,90 @@ static void case_packed(const unsigned char* payload, unsigned long payload_size
 	check(file_value("target_marker.log", "dll_attach") != 0, "DllMain saw DLL_PROCESS_ATTACH in the packed image");
 }
 
+/*
+ * Locate the metadata the same way the loader does - page aligned, scanning
+ * forward for the magic - so the test does not have to read pack.py's report.
+ * Returns the offset, or 0 when the payload holds no metadata.
+ */
+static unsigned long find_meta_offset(const unsigned char* payload, unsigned long size)
+{
+	static const char magic[8] = { 'R', 'F', 'D', 'L', 'M', 'E', 'T', 'A' };
+	unsigned long offset = 0;
+
+	for (offset = 0; offset + 8 <= size; offset += 0x1000)
+	{
+		if (memcmp(payload + offset, magic, 8) == 0)
+			return offset;
+	}
+
+	return 0;
+}
+
+/*
+ * Case 6: the packed loader must refuse a metadata whose dll_size points past
+ * the memory that holds the payload.
+ *
+ * The metadata sits inside the payload, so its fields are untrusted input. The
+ * loader decrypts in place before the PE headers are ever validated, so without
+ * the region bound this write would run far past the buffer.
+ */
+static void case_packed_bad_size(const unsigned char* payload, unsigned long payload_size,
+	unsigned long meta_offset)
+{
+	unsigned char* copy = NULL;
+	void* payload_mem = NULL;
+	rfdll_entry entry = NULL;
+	unsigned long long base = 0;
+	unsigned long patched = 0;
+
+	printf("\n=== case 6: packed payload with a dll_size past the end of the buffer ===\n");
+
+	if (meta_offset + 19 > payload_size)
+	{
+		check(0, "host found the metadata header inside the payload");
+		return;
+	}
+
+	copy = (unsigned char*)malloc(payload_size);
+	if (copy == NULL)
+	{
+		check(0, "host could copy the payload");
+		return;
+	}
+	memcpy(copy, payload, payload_size);
+
+	/* dll_size lives at meta + 11 and is little endian. */
+	patched = 0x40000000UL;
+	copy[meta_offset + 11] = (unsigned char)(patched & 0xFF);
+	copy[meta_offset + 12] = (unsigned char)((patched >> 8) & 0xFF);
+	copy[meta_offset + 13] = (unsigned char)((patched >> 16) & 0xFF);
+	copy[meta_offset + 14] = (unsigned char)((patched >> 24) & 0xFF);
+	printf("  [*] dll_size patched to 0x%lx inside a %lu byte payload\n", patched, payload_size);
+
+	payload_mem = VirtualAlloc(NULL, payload_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+	if (payload_mem == NULL)
+	{
+		check(0, "host could allocate memory for the corrupt payload");
+		free(copy);
+		return;
+	}
+	memcpy(payload_mem, copy, payload_size);
+	FlushInstructionCache(GetCurrentProcess(), payload_mem, payload_size);
+	free(copy);
+
+	entry = (rfdll_entry)payload_mem;
+	base = entry(NULL, 0);
+	printf("  [*] entry returned 0x%llx\n", base);
+
+	/* The point is the clean rejection: no crash, and no image claimed. */
+	check(base == 0, "loader refused a dll_size that runs past the payload region");
+
+	if (base == 0)
+		check(1, "the process survived the corrupt payload (no out of bounds write)");
+
+	VirtualFree(payload_mem, 0, MEM_RELEASE);
+}
+
 int main(int argc, char** argv)
 {
 	unsigned char* loader_bytes = NULL;
@@ -663,6 +747,7 @@ int main(int argc, char** argv)
 			return 2;
 		}
 		case_packed(payload_bytes, payload_size, target_bytes);
+		case_packed_bad_size(payload_bytes, payload_size, find_meta_offset(payload_bytes, payload_size));
 		free(payload_bytes);
 	}
 	else

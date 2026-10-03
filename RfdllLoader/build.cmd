@@ -9,14 +9,16 @@ rem entry point called by the client has to sit at offset 0 of the file.
 
 set CFLAGS=/c /Od /GS- /Gs9999999 /Gy- /GR- /EHs-c- /MT
 
-cl %CFLAGS% /Fo:loader.obj loader.c
-cl %CFLAGS% /Fo:loader_packed.obj loader_packed.c
-cl %CFLAGS% /Fo:pe_loader.obj pe_loader.c
-cl %CFLAGS% /Fo:rc4.obj rc4.c
-cl %CFLAGS% /Fo:misc.obj misc.c
-cl %CFLAGS% /Fo:ldr.obj ldr.c
-ml64.exe  /Fo get_peb.obj /c get_peb.asm
-ml64.exe  /Fo get_rip.obj /c get_rip.asm
+rem Every step is checked: without this a compile error would be ignored and the
+rem link would quietly reuse a stale object file from an earlier run.
+cl %CFLAGS% /Fo:loader.obj loader.c || exit /b 1
+cl %CFLAGS% /Fo:loader_packed.obj loader_packed.c || exit /b 1
+cl %CFLAGS% /Fo:pe_loader.obj pe_loader.c || exit /b 1
+cl %CFLAGS% /Fo:rc4.obj rc4.c || exit /b 1
+cl %CFLAGS% /Fo:misc.obj misc.c || exit /b 1
+cl %CFLAGS% /Fo:ldr.obj ldr.c || exit /b 1
+ml64.exe  /Fo get_peb.obj /c get_peb.asm || exit /b 1
+ml64.exe  /Fo get_rip.obj /c get_rip.asm || exit /b 1
 
 set COMMON=pe_loader.obj rc4.obj misc.obj ldr.obj get_peb.obj get_rip.obj
 

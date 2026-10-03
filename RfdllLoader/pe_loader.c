@@ -3,6 +3,7 @@
 #include "headers.h"
 #include "ldr.h"
 #include "misc.h"
+#include "payload.h"
 #include "pe_loader.h"
 
 /*
@@ -47,10 +48,11 @@ static void* rfdll_memcpy(void* dest, const void* src, size_t count)
 
 /* ============================ helpers ============================ */
 
-#define RFDLL_PAGE_SIZE 0x1000
-
-/* Largest image the loader is willing to map (also keeps DWORD arithmetic safe). */
-#define RFDLL_MAX_IMAGE_SIZE 0x7FFFFFFF
+/*
+ * RFDLL_PAGE_SIZE and RFDLL_MAX_IMAGE_SIZE come from payload.h: the packed
+ * payload layout and the section rounding here have to agree on them, so they
+ * are defined in one place only.
+ */
 
 static DWORD rfdll_align_down(DWORD value, DWORD alignment)
 {

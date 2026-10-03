@@ -119,16 +119,18 @@ static PRFDLL_META rfdll_find_meta(PBYTE start, PBYTE* region_limit)
  * Validate the metadata and decrypt the image in place.
  *
  * region_limit is the end of the committed memory that holds the payload, as
- * reported by VirtualQuery, or NULL when that could not be determined. The
- * metadata lives inside the payload and is therefore untrusted: without the
- * limit a corrupt dll_size would make the in place RC4 write past the end of
- * the buffer. When the limit is unknown the caller has to accept that risk,
- * which is why the PE headers are still revalidated by rfdll_load_image.
+ * reported by VirtualQuery. The metadata lives inside the payload and is
+ * therefore untrusted: a corrupt dll_size would make the in place RC4 write
+ * past the end of the buffer, which is why a missing limit refuses the payload
+ * instead of skipping the check (failing open here would undo the bound).
  */
 static BOOL rfdll_open_payload(PRFDLL_META meta, PRFDLL_PAYLOAD payload, PBYTE region_limit)
 {
 	PBYTE image = NULL;
 	PBYTE payload_end = NULL;
+
+	if (region_limit == NULL)
+		return FALSE;
 
 	if (meta->version != RFDLL_META_VERSION)
 		return FALSE;
@@ -146,12 +148,12 @@ static BOOL rfdll_open_payload(PRFDLL_META meta, PRFDLL_PAYLOAD payload, PBYTE r
 	image = (PBYTE)meta + RFDLL_META_HEADER_SIZE + meta->key_length;
 	payload_end = image + meta->dll_size;
 
-	/* Reject a payload that would run past the memory that holds it. */
-	if (region_limit != NULL)
-	{
-		if (image < (PBYTE)meta || payload_end > region_limit || payload_end < image)
-			return FALSE;
-	}
+	/*
+	 * Reject a payload that would run past the memory that holds it. The second
+	 * test also catches the wrap around of image + dll_size in 64 bit.
+	 */
+	if (payload_end > region_limit || payload_end < image)
+		return FALSE;
 
 	payload->meta = meta;
 	payload->image = image;
