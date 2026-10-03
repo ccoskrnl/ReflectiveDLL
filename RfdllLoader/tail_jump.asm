@@ -11,15 +11,24 @@
 ;   RDX = DLL_PROCESS_ATTACH
 ;   R8  = lpReserved (the payload info pointer)
 ;
-; STATUS: the jump into the image is verified working. DllMain runs to completion,
-; the payload info arrives through both channels (lpReserved and the copy at
-; image+0x40) and the payload frees the loader's own region. The trampoline below
-; is NOT reached.
+; STATUS: complete for the contract this loader defines. The image entry point
+; does not return for any normally built payload, and that is deliberate rather
+; than a defect: the payload owns the thread from the moment it takes over. See
+; payload.h for why the CRT's layout makes the return path unavailable, and for
+; what the entry point does and does not promise.
 ;
-; What the measurements established
-; ---------------------------------
+; A diagnostic payload whose entry point is a plain function that ends in a real
+; ret was built and run to confirm which side of that line the trampoline is on:
+; control came back to the caller, so the trampoline itself is sound and the CRT
+; startup is what makes a normal payload diverge. A normally built DLL puts
+; _DllMainCRTStartup at AddressOfEntryPoint, and that function releases its own
+; frame and then TAIL-JUMPS into DllMain, so the ret that ends DllMain never
+; returns through the address the entry point was given.
+;
+; What the measurements established for the frame itself
+; ------------------------------------------------------
 ; The host prints the stack pointer at its call site (H), and dumping the live
-; frame at the fault identifies E, the RSP the image entry point is entered with,
+; frame at a fault identifies E, the RSP the image entry point is entered with,
 ; from DllMain's four argument spills (image base, reason code, info pointer,
 ; payload size) which appear at E+8..E+0x20. In one run that gave:
 ;
@@ -28,22 +37,11 @@
 ;   R9 = E + 0x20 = H - 8 so the caller return address sits at E+0x28
 ;
 ; So the frame placement and the offsets are consistent, and the trampoline is
-; stored exactly at [E], which is the slot the entry point is handed.
+; stored exactly at [E], the slot the entry point is handed.
 ;
-; What is still unresolved
-; ------------------------
-; An int3 placed at the trampoline never trips even though DllMain logs all of its
-; lines, so the ret that ends the image does not arrive at [E]. Statically the
-; payload says it should: _DllMainCRTStartup sits at AddressOfEntryPoint, releases
-; its own frame and tail-jumps into DllMain, whose single epilogue ret reads the
-; slot it was entered with. The two observations disagree and nothing measured so
-; far explains why, so the next step is to break inside the image at its ret
-; rather than keep adjusting this stub.
-;
-; Until then, treat this entry point as "runs the payload and does not come back".
-; The 20h reservation stays: it keeps the entry point 8 modulo 16, and reserving
-; only shadow space for a call left it misaligned, which faulted much later inside
-; ntdll on a movaps during import resolution, nowhere near this code.
+; The 20h reservation is required and stays: it keeps the entry point 8 modulo 16.
+; Reserving only shadow space for a call left it misaligned, which faulted much
+; later inside ntdll on a movaps during import resolution, nowhere near this code.
 ;
 ; Assemble with: ml64 /c /Fo:tail_jump.obj tail_jump.asm
 

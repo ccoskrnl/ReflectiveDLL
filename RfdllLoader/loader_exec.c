@@ -320,11 +320,13 @@ void rfdll_exec_run(PBYTE caller_stack)
 	info.host_hash = payload.host_hash;
 
 	/*
-	 * This entry point wipes the payload and cannot free it, because it is
-	 * still running from that region when it leaves, so the payload is asked
-	 * to release it.
+	 * This entry point wipes the payload and cannot free it, because it is still
+	 * running from that region when it leaves, so the payload is asked to release
+	 * it. The payload also owns the thread from here on: the ret that would end
+	 * DllMain does not lead back to the caller, so a payload that simply returns
+	 * runs off the end of a frame that is no longer its own.
 	 */
-	info.flags = RFDLL_PAYLOAD_FLAG_FREE_BY_DLL;
+	info.flags = RFDLL_PAYLOAD_FLAG_FREE_BY_DLL | RFDLL_PAYLOAD_FLAG_PAYLOAD_OWNS_THREAD;
 
 	copy = rfdll_exec_copy_image(&payload, virtual_alloc);
 	if (copy == NULL)

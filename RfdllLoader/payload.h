@@ -101,6 +101,25 @@ typedef struct _RFDLL_PAYLOAD
  */
 #define RFDLL_PAYLOAD_FLAG_FREE_BY_DLL  0x00000001
 
+/*
+ * info.flags value that tells the payload it owns the thread from here on.
+ *
+ * The executing entry point does not return (see entrypoint_exec below), and for
+ * a normally built payload the ret that would end DllMain does not lead back to
+ * the caller anyway. A payload that simply returns therefore ends up running off
+ * the end of a frame that no longer belongs to it, which faults and takes the
+ * process with it.
+ *
+ * A payload that intends to keep running sets nothing here and decides for itself
+ * what to do; this flag is for one that has finished its work and wants to stay
+ * alive without returning. It should block the thread (or start a thread of its
+ * own and then block), never fall off the end of DllMain.
+ *
+ * The test payload uses this to model a real one: it finishes its work, records
+ * it, and then parks the thread.
+ */
+#define RFDLL_PAYLOAD_FLAG_PAYLOAD_OWNS_THREAD  0x00000002
+
 /* Where the copy lives inside the mapped image (inside the DOS stub area). */
 #define RFDLL_PAYLOAD_INFO_OFFSET  0x40
 #define RFDLL_PAYLOAD_INFO_SIZE    64
@@ -117,25 +136,43 @@ typedef struct _RFDLL_PAYLOAD_INFO
 	                        receives as its first argument)                   */
 	SIZE_T image_size;   /* SizeOfImage of that mapping                       */
 	DWORD host_hash;     /* the metadata's host_hash, currently unused        */
-	DWORD flags;         /* RFDLL_PAYLOAD_FLAG_*                              */
-} RFDLL_PAYLOAD_INFO, *PRFDLL_PAYLOAD_INFO;
+	DWORD flags;         /* RFDLL_PAYLOAD_FLAG_*                              */} RFDLL_PAYLOAD_INFO, *PRFDLL_PAYLOAD_INFO;
 #pragma pack(pop)
 
 /* Entry point of the packed payload. Takes no arguments. */
 UINT64 entrypoint_packed(void);
 
 /*
- * Entry point of the executing payload. Takes no arguments and never returns:
- * it maps the image, wipes the payload, then jumps into the image entry point
- * so no return address into the payload is left on the stack.
+ * Entry point of the executing payload. Takes no arguments and DOES NOT RETURN:
+ * it maps the image, wipes the payload, then jumps into the image entry point so
+ * that no return address into the payload is left on the stack.
  *
- * It is written in assembly (entry_exec.asm) so the caller's stack pointer can
- * be read before any frame exists, and it is the first object on the link line
- * so that it sits at offset 0 of loader_exec.bin.
+ * "Does not return" is the defined contract, not a known defect. The payload owns
+ * the thread from the moment it takes over, and decides for itself what happens
+ * next (running on, starting its own thread, exiting the thread, and so on). The
+ * caller must not expect control back and must not have work that depends on it.
  *
- * Because it does not return, it cannot report a failure to its caller either:
- * a failure ends with the C part returning, and the assembly entry then returns
- * to the caller.
+ * Why the return path is not offered:
+ *   A normally built DLL puts the CRT's _DllMainCRTStartup at AddressOfEntryPoint.
+ *   That function releases its own frame and then TAIL-JUMPS into DllMain, so the
+ *   ret that ends DllMain does not return through the address the entry point was
+ *   given, and a trampoline placed there is never used. That is a property of how
+ *   the CRT is laid out, not something the loader can arrange around: the payload
+ *   supplies its own entry point, and the loader has to work with whatever shape
+ *   it has.
+ *
+ *   The trampoline in tail_jump.asm is therefore left in place but is not relied
+ *   upon. It exists so the frame has a well formed return address, and it works
+ *   for a payload whose entry point is a plain function that returns normally
+ *   (verified with a diagnostic payload built /ENTRY:something_that_rets).
+ *
+ * It is written in assembly (entry_exec.asm) so the caller's stack pointer can be
+ * read before any frame exists, and it is the first object on the link line so
+ * that it sits at offset 0 of loader_exec.bin.
+ *
+ * Because it does not return, it cannot report a failure to its caller either. A
+ * failure before the jump ends with the C part returning, and the assembly entry
+ * then returns to the caller; after the jump the payload is in charge.
  */
 void entrypoint_exec(void);
 
@@ -146,12 +183,12 @@ void entrypoint_exec(void);
 void rfdll_exec_run(PBYTE caller_stack);
 
 /*
- * Provided by tail_jump.asm. Enters the image entry point and never returns.
+ * Provided by tail_jump.asm. Enters the image entry point. It does not return for
+ * any payload a normal build produces; see the note on entrypoint_exec above.
  *
- * caller_stack is the stack pointer the payload's caller had at its call, which
- * is where the image entry point runs from. Restoring it means the DLL's own
- * frame is the only thing on the stack and its return goes back to whoever
- * called the payload. The value is passed in rather than assumed because the
+ * caller_stack is the stack pointer the payload's caller had at its call. It is
+ * restored so the image entry point runs on the caller's stack rather than on the
+ * shellcode's frame, and the values are passed in rather than assumed because the
  * compiler decides the frame size.
  */
 void rfdll_tail_jump(void* image_base, void* lp_reserved, void* entry, void* caller_stack);

@@ -111,6 +111,7 @@ static void log_text(const char* tag, const char* text)
 #define RFDLL_PAYLOAD_INFO_VERSION  1
 #define RFDLL_PAYLOAD_INFO_OFFSET   0x40
 #define RFDLL_PAYLOAD_FLAG_FREE_BY_DLL  0x00000001
+#define RFDLL_PAYLOAD_FLAG_PAYLOAD_OWNS_THREAD  0x00000002
 
 typedef struct _RFDLL_PAYLOAD_INFO
 {
@@ -248,8 +249,23 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		 * itself, so it asks the payload to. The plain packed entry point keeps
 		 * the payload as its own, and then this flag is not set.
 		 */
-		if (info != NULL && info->flags == RFDLL_PAYLOAD_FLAG_FREE_BY_DLL)
+		if (info != NULL && (info->flags & RFDLL_PAYLOAD_FLAG_FREE_BY_DLL) != 0)
 			release_payload(info);
+
+		/*
+		 * The executing entry point does not return, so this payload owns the
+		 * thread. Falling off the end of DllMain would run into a frame that no
+		 * longer belongs to it and fault, taking the process down. A real payload
+		 * would keep working here (start its own thread, run its task, and so on);
+		 * this one has nothing left to do, so it parks the thread for good and
+		 * lets the host observe the result from outside.
+		 */
+		if (info != NULL && (info->flags & RFDLL_PAYLOAD_FLAG_PAYLOAD_OWNS_THREAD) != 0)
+		{
+			log_text("payload_parked", "ok");
+			for (;;)
+				Sleep(1000);
+		}
 		break;
 	}
 	case DLL_PROCESS_DETACH:

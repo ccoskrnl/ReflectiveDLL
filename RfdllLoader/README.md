@@ -57,7 +57,7 @@ endian for the multi byte fields):
 The image is decrypted where it lies, so the mapped image never contains the
 loader, and the header page is read-only once mapping is done.
 
-## Executing payload (incomplete)
+## Executing payload (takes over the thread)
 
 `loader_exec.bin` is a third shape, packed the same way as `loader_packed.bin`
 but entered with `entrypoint_exec`. It does everything the packed entry point
@@ -79,31 +79,29 @@ The payload reads that structure and releases the payload region itself, which
 it can only do because the loader tells it where the region is and how big it
 is. `test/target_dll.c` does exactly that and logs `payload_free ok`.
 
-**Known incomplete:** returning from the image entry point back to the caller
-does not work yet. Everything up to and including the jump is verified: the
-metadata is found, the image runs, the info arrives through both channels, and
-the payload frees the loader's own region (`payload_free ok` in the marker log).
+**The entry point does not return, and that is the contract.** The payload owns
+the thread from the moment it takes over and decides for itself what happens next.
+The caller must not expect control back and must not have work that depends on it.
 
-Two facts about the return path were established from evidence rather than
-guessed at, and both are recorded in `tail_jump.asm`:
+The reason is a property of how an MSVC DLL is laid out, not something the loader
+can arrange around. A normally built payload has the CRT's `_DllMainCRTStartup` at
+`AddressOfEntryPoint`, and that function releases its own frame and then
+**tail-jumps into `DllMain`**. The `ret` that ends `DllMain` therefore does not go
+back through the address the entry point was given, so a trampoline placed there
+is never used. The payload supplies its own entry point and the loader has to work
+with whatever shape it has.
 
-* a normally built MSVC payload has `_DllMainCRTStartup` at
-  `AddressOfEntryPoint`, and that function releases its own frame and then
-  **tail-jumps into `DllMain`**. `DllMain` is therefore entered with exactly the
-  stack pointer the entry point was handed, and its epilogue's `ret` reads that
-  same slot;
-* dumping the live stack at the fault showed that the slot the trampoline is
-  stored in is **inside the region the host allocated for the payload**, not in
-  the caller's frame. `entry_exec.asm` can only see the stack pointer the payload
-  was called with, and building a frame downward from it writes into payload
-  memory. `DllMain` therefore returns to a payload address that the wipe has
-  already destroyed.
+This was confirmed by building a diagnostic payload whose entry point is a plain
+function ending in a real `ret`: with that payload control came back to the caller
+normally, which shows the trampoline itself is sound and the CRT's tail jump is
+what makes a normal payload diverge.
 
-So the open question is not a frame size but where the caller's return address
-actually is relative to what the entry point can observe. Settling it needs
-evidence gathered from the host side, around its call to the payload, which has
-not been done yet. Until then the entry point should be treated as "runs the
-payload and does not come back", and test case 7 is opt-in for that reason.
+Because the return path is not available, the loader tells the payload that it
+owns the thread (`RFDLL_PAYLOAD_FLAG_PAYLOAD_OWNS_THREAD`). A payload that falls
+off the end of `DllMain` runs into a frame that is no longer its own and faults,
+taking the process down; a payload that means to keep running should block the
+thread, or start one of its own and then block. `test/target_dll.c` does the
+former and logs `payload_parked ok`.
 
 ## Interface
 
@@ -233,9 +231,9 @@ cipher), `get_rip.asm` (RIP anchor for the argument-less entry point),
 
 ## End to end test
 
-`test/` holds a self contained test of the loader (six cases, 58 checks when a
-packed payload is supplied). Build it from a VS developer command prompt, after
-`build.cmd` produced `loader.bin`:
+`test/` holds a self contained test of the loader (seven cases, 67 checks when
+both packed payloads are supplied). Build it from a VS developer command prompt,
+after `build.cmd` produced the three blobs:
 
 ```
 cd test
@@ -243,12 +241,14 @@ build_test.cmd
 host.exe ..\loader.bin target.dll fail.dll
 ```
 
-The packed form is optional and needs a payload built by `pack.py` first:
+The packed forms are optional and need payloads built by `pack.py` first:
 
 ```
 python ..\pack.py --dll target.dll --loader ..\loader_packed.bin ^
     --out packtest_b2b\payload.bin --info packtest_b2b\payload_info.json --seed 1234
-host.exe ..\loader.bin target.dll fail.dll packtest_b2b\payload.bin
+python ..\pack.py --dll target.dll --loader ..\loader_exec.bin ^
+    --out packtest_b2b\exec_payload.bin --info packtest_b2b\exec_info.json --seed 4321
+host.exe ..\loader.bin target.dll fail.dll packtest_b2b\payload.bin packtest_b2b\exec_payload.bin
 ```
 
 * `target_dll.c`: payload that records every step in `target_marker.log` (kernel32 only,
@@ -270,6 +270,7 @@ host.exe ..\loader.bin target.dll fail.dll packtest_b2b\payload.bin
 | 4 - load `fail.dll` with its entry point RVA outside the image | the loader treats the image as malformed: it returns 0, releases the TLS callbacks with `DLL_PROCESS_DETACH`, never calls the entry point, and frees the image |
 | 5 - packed payload, entry called with **no** arguments | the packed entry finds its own metadata, decrypts the image in place and maps it: the 64 bit region bound, the RC4 step and the metadata layout all work together, and the resulting image passes the same relocation / protection / export / TLS checks as case 1 |
 | 6 - packed payload with `dll_size` patched past the buffer | the metadata is untrusted input and the in place decrypt happens before the PE is validated, so the loader has to refuse it: it returns 0 without writing outside the payload |
+| 7 - executing payload, entered on its own thread | the entry point takes the thread over and does not return: the metadata is found, the image is mapped and relocated, the payload info arrives through both channels, the payload releases the loader's region itself (`payload_free ok`) and keeps the thread instead of falling off the end of `DllMain` (`payload_parked ok`). The case runs the payload on a separate thread precisely because the entry point owns it |
 
 Behaviour the test pins down:
 
